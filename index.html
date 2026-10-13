@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#070709">
+  
+  <!-- PWA & Mobile Web App Meta Tags -->
+  <title>Foto-Live</title>
+  <meta name="description" content="Aplikasi Kamera Foto-Live modern dengan perekaman gerak instan, mode anti-gravitasi, dan instalasi pintasan layar utama.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Foto-Live">
+  <meta name="application-name" content="Foto-Live">
+  <meta name="msapplication-TileColor" content="#070709">
+
+  <!-- Manifest & Icons -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="app-container">
+    <!-- Top Header Bar -->
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <!-- Live Photo Glowing Amber Badge -->
+        <button id="live-toggle" class="badge-live active" title="Beralih Mode LIVE Photo">
+          <span class="live-icon-dot"></span>
+          <span>LIVE</span>
+        </button>
+        <!-- Anti-Gravity Demo Toggle -->
+        <button id="demo-toggle" class="btn-icon" title="Mode Zero-Gravity Anti-Gravitasi">
+          🌌
+        </button>
+      </div>
+
+      <div class="top-bar-center">
+        <!-- Quick Install Shortcut Button -->
+        <button id="btn-install" class="btn-install-shortcut" title="Pasang ke Layar Utama">
+          📲 Pasang Pintasan
+        </button>
+      </div>
+
+      <div class="top-bar-right">
+        <!-- Flash Setting -->
+        <button id="flash-toggle" class="btn-icon" title="Flash">⚡</button>
+        <!-- Grid Toggle -->
+        <button id="grid-toggle" class="btn-icon" title="Grid 3x3">#</button>
+        <!-- Timer Toggle -->
+        <button id="timer-toggle" class="btn-icon" title="Timer">⏱️</button>
+      </div>
+    </header>
+
+    <!-- Main Viewfinder -->
+    <main class="viewfinder-wrapper">
+      <!-- Live Hardware Camera Stream -->
+      <video id="camera-video" autoplay playsinline muted></video>
+
+      <!-- Zero-G / Fallback Scene (POV Anti-Gravity Floating Room) -->
+      <img id="fallback-viewfinder" class="fallback-viewfinder" src="assets/anti_gravity_preview.jpg" alt="Anti-Gravity Room Preview">
+
+      <!-- FX Canvas (Particle & AR Overlay) -->
+      <canvas id="fx-canvas"></canvas>
+
+      <!-- Grid Overlay (Rule of Thirds) -->
+      <div id="grid-overlay" class="grid-overlay">
+        <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+        <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+        <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+      </div>
+
+      <!-- Recording Motion HUD -->
+      <div id="recording-hud" class="recording-hud">
+        <span class="rec-pulse-dot"></span>
+        <span>Merekam Gerak Live...</span>
+      </div>
+
+      <!-- Countdown Overlay -->
+      <div id="countdown-overlay" class="countdown-overlay">
+        <div id="countdown-number" class="countdown-number">3</div>
+      </div>
+
+      <!-- Screen Flash Effect -->
+      <div id="flash-screen" class="flash-screen"></div>
+
+      <!-- Offscreen Canvas for Frame Capture -->
+      <canvas id="capture-canvas" style="display: none;"></canvas>
+    </main>
+
+    <!-- Bottom Controls Bar -->
+    <footer class="bottom-bar">
+      <!-- Thumbnail Gallery Button -->
+      <div id="gallery-thumb" class="btn-gallery-thumb" title="Buka Galeri Foto">
+        <span id="thumb-icon" style="font-size: 20px;">🖼️</span>
+        <img id="thumb-img" src="" alt="Foto" style="display: none;">
+        <span id="thumb-count" class="thumb-count-badge" style="display: none;">0</span>
+      </div>
+
+      <!-- Concentric Rings Shutter Button -->
+      <div id="shutter-btn" class="shutter-wrapper live-active" title="Ambil Live Photo">
+        <div class="shutter-outer-ring"></div>
+        <div class="shutter-middle-ring"></div>
+        <div class="shutter-inner-core"></div>
+      </div>
+
+      <!-- Switch / Flip Camera Button -->
+      <button id="flip-btn" class="btn-flip-cam" title="Balik Kamera Depan / Belakang">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 10c0-4.418-3.582-8-8-8s-8 3.582-8 8c0 1.956.702 3.748 1.87 5.143L4 17h6v-6l-2.072 2.072C7.035 12.012 6.5 10.57 6.5 9c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5c0 1.57-.535 3.012-1.428 4.072"/>
+          <path d="M4 14c0 4.418 3.582 8 8 8s8-3.582 8-8c0-1.956-.702-3.748-1.87-5.143L20 7h-6v6l2.072-2.072C16.965 11.988 17.5 13.43 17.5 15c0 3.038-2.462-5.5-5.5 5.5s-5.5-2.462-5.5-5.5c0-1.57.535-3.012 1.428-4.072"/>
+        </svg>
+      </button>
+    </footer>
+  </div>
+
+  <!-- Interactive Live Photo Modal Viewer -->
+  <div id="preview-modal" class="modal-viewer">
+    <div class="modal-header">
+      <div id="modal-live-badge" class="badge-live active">
+        <span class="live-icon-dot"></span>
+        <span>LIVE</span>
+      </div>
+      <button id="close-modal-btn" class="btn-icon" style="font-size: 20px;">✕</button>
+    </div>
+
+    <div id="interactive-area" class="modal-content-area" title="Tahan untuk memutar gerak">
+      <img id="modal-still-img" alt="Foto Diam">
+      <video id="modal-motion-video" playsinline loop muted></video>
+      <div id="hold-hint" class="hold-hint-badge">
+        <span>👆 Tahan layar untuk memutar gerak</span>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button id="share-btn" class="btn-action" title="Bagikan">
+        📤 Bagikan
+      </button>
+      <button id="download-photo-btn" class="btn-action primary">
+        💾 Unduh JPG
+      </button>
+      <button id="download-video-btn" class="btn-action">
+        🎬 Klip Gerak
+      </button>
+      <button id="delete-btn" class="btn-action danger" title="Hapus Foto">
+        🗑️
+      </button>
+    </div>
+  </div>
+
+  <!-- PWA Install / Shortcut Bottom Sheet Guidance -->
+  <div id="install-sheet-backdrop" class="install-sheet-backdrop">
+    <div class="install-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">
+        <span>📲 Pasang Pintasan di Layar Utama</span>
+      </div>
+      <p class="sheet-desc">
+        Pasang aplikasi ini ke layar utama ponsel Anda agar dapat dibuka seperti aplikasi kamera bawaan secara instan dan fullscreen!
+      </p>
+
+      <div class="sheet-steps">
+        <div class="step-item">
+          <span class="step-number">1</span>
+          <span><strong>Di Android (Chrome / Poco / Xiaomi):</strong> Ketuk tombol <em>"Pasang Sekarang"</em> di bawah, atau ketuk menu titik tiga (⋮) di pojok kanan atas browser lalu pilih <strong>"Tambahkan ke Layar Utama"</strong> atau <strong>"Instal Aplikasi"</strong>.</span>
+        </div>
+        <div class="step-item">
+          <span class="step-number">2</span>
+          <span><strong>Di iPhone / iPad (Safari):</strong> Ketuk ikon <strong>Bagikan (Share)</strong> di bilah bawah browser, lalu gulir dan pilih <strong>"Tambah ke Layar Utama" (Add to Home Screen)</strong>.</span>
+        </div>
+      </div>
+
+      <div class="sheet-actions">
+        <button id="btn-trigger-install" class="btn-primary-install">
+          🚀 Pasang Sekarang
+        </button>
+        <button id="btn-close-sheet" class="btn-close-sheet">
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Floating Toast -->
+  <div id="toast" class="toast-msg"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
