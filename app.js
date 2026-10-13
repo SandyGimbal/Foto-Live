@@ -12,6 +12,8 @@ let gridActive = false;
 let timerSeconds = 0; // 0 | 3 | 10
 let isDemoMode = false;
 let deferredInstallPrompt = null;
+let isAutoSaveActive = localStorage.getItem('fotolive_autosave') !== 'false'; // default aktif
+let db = null;
 
 // Photo Gallery Storage (Current Session & Recent Captures)
 let galleryItems = [];
@@ -102,6 +104,7 @@ const countdownNumber = document.getElementById('countdown-number');
 
 // Top Controls
 const liveToggle = document.getElementById('live-toggle');
+const autosaveToggle = document.getElementById('autosave-toggle');
 const flashToggle = document.getElementById('flash-toggle');
 const gridToggle = document.getElementById('grid-toggle');
 const timerToggle = document.getElementById('timer-toggle');
@@ -120,6 +123,9 @@ const modal = document.getElementById('preview-modal');
 const modalStillImg = document.getElementById('modal-still-img');
 const modalMotionVideo = document.getElementById('modal-motion-video');
 const modalLiveBadge = document.getElementById('modal-live-badge');
+const modalPhotoCounter = document.getElementById('modal-photo-counter');
+const modalPrevBtn = document.getElementById('modal-prev-btn');
+const modalNextBtn = document.getElementById('modal-next-btn');
 const holdHint = document.getElementById('hold-hint');
 const interactiveArea = document.getElementById('interactive-area');
 const closeModalBtn = document.getElementById('close-modal-btn');
@@ -387,6 +393,29 @@ timerToggle.addEventListener('click', () => {
   }
 });
 
+// Auto-Save Toggle
+function updateAutoSaveUI() {
+  if (!autosaveToggle) return;
+  if (isAutoSaveActive) {
+    autosaveToggle.classList.add('active');
+    autosaveToggle.innerHTML = `💾 <span style="font-size:9px; font-weight:700;">ON</span>`;
+    autosaveToggle.title = 'Auto-Save ke Galeri HP: AKTIF';
+  } else {
+    autosaveToggle.classList.remove('active');
+    autosaveToggle.innerHTML = `💾`;
+    autosaveToggle.title = 'Auto-Save ke Galeri HP: NONAKTIF';
+  }
+}
+
+if (autosaveToggle) {
+  autosaveToggle.addEventListener('click', () => {
+    isAutoSaveActive = !isAutoSaveActive;
+    localStorage.setItem('fotolive_autosave', isAutoSaveActive ? 'true' : 'false');
+    updateAutoSaveUI();
+    showToast(isAutoSaveActive ? 'Auto-Save ke Galeri HP: AKTIF 💾' : 'Auto-Save ke Galeri HP: NONAKTIF');
+  });
+}
+
 // Demo Zero-G Toggle
 demoToggle.addEventListener('click', () => {
   if (isDemoMode) {
@@ -581,7 +610,129 @@ function createZeroGMotionStream() {
 }
 
 // ==========================================
-// 4. GALLERY & INTERACTIVE VIEWER
+// 4. STORAGE (INDEXEDDB) & AUTO-SAVE GALLERY
+// ==========================================
+
+function initDB() {
+  return new Promise((resolve) => {
+    if (!window.indexedDB) {
+      console.warn('IndexedDB tidak didukung pada browser ini');
+      resolve(null);
+      return;
+    }
+    const request = indexedDB.open('FotoLiveDB', 1);
+    request.onupgradeneeded = (e) => {
+      const database = e.target.result;
+      if (!database.objectStoreNames.contains('photos')) {
+        database.createObjectStore('photos', { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = (e) => {
+      db = e.target.result;
+      resolve(db);
+    };
+    request.onerror = (e) => {
+      console.warn('Gagal membuka IndexedDB:', e);
+      resolve(null);
+    };
+  });
+}
+
+function savePhotoToDB(item) {
+  if (!db) return;
+  try {
+    const tx = db.transaction('photos', 'readwrite');
+    const store = tx.objectStore('photos');
+    store.put({
+      id: item.id,
+      timestamp: item.timestamp,
+      photoBlob: item.photoBlob,
+      videoBlob: item.videoBlob,
+      isLive: item.isLive
+    });
+  } catch (err) {
+    console.warn('Gagal menyimpan ke IndexedDB:', err);
+  }
+}
+
+async function loadPhotosFromDB() {
+  if (!db) await initDB();
+  if (!db) return;
+
+  try {
+    const tx = db.transaction('photos', 'readonly');
+    const store = tx.objectStore('photos');
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const savedItems = request.result || [];
+      savedItems.sort((a, b) => b.id - a.id); // Foto terbaru di awal
+
+      galleryItems = savedItems.map(s => ({
+        id: s.id,
+        timestamp: s.timestamp,
+        photoBlob: s.photoBlob,
+        photoUrl: URL.createObjectURL(s.photoBlob),
+        videoBlob: s.videoBlob,
+        videoUrl: s.videoBlob ? URL.createObjectURL(s.videoBlob) : null,
+        isLive: s.isLive
+      }));
+
+      if (galleryItems.length > 0) {
+        thumbImg.src = galleryItems[0].photoUrl;
+        thumbImg.style.display = 'block';
+        const thumbIcon = document.getElementById('thumb-icon');
+        if (thumbIcon) thumbIcon.style.display = 'none';
+        thumbCount.textContent = galleryItems.length;
+        thumbCount.style.display = 'block';
+        galleryThumb.style.display = 'flex';
+      }
+    };
+  } catch (err) {
+    console.warn('Gagal memuat galeri dari IndexedDB:', err);
+  }
+}
+
+function deletePhotoFromDB(id) {
+  if (!db) return;
+  try {
+    const tx = db.transaction('photos', 'readwrite');
+    tx.objectStore('photos').delete(id);
+  } catch (err) {
+    console.warn('Gagal menghapus dari IndexedDB:', err);
+  }
+}
+
+// Otomatis Simpan ke Penyimpanan/Galeri HP (File .jpg & .webm)
+function autoSaveToDeviceGallery(item) {
+  if (!isAutoSaveActive) return;
+
+  try {
+    // 1. Simpan foto diam JPG (otomatis masuk album Unduhan/Galeri HP)
+    const a = document.createElement('a');
+    a.href = item.photoUrl;
+    a.download = `FotoLive_${item.id}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // 2. Jika mode Live Photo aktif, simpan juga klip geraknya
+    if (item.isLive && item.videoUrl) {
+      setTimeout(() => {
+        const v = document.createElement('a');
+        v.href = item.videoUrl;
+        v.download = `FotoLive_Motion_${item.id}.webm`;
+        document.body.appendChild(v);
+        v.click();
+        document.body.removeChild(v);
+      }, 350);
+    }
+  } catch (err) {
+    console.warn('Gagal auto-save ke perangkat:', err);
+  }
+}
+
+// ==========================================
+// 5. GALLERY & INTERACTIVE VIEWER
 // ==========================================
 
 function saveCaptureToGallery(photoBlob, videoBlob, isLive) {
@@ -598,6 +749,14 @@ function saveCaptureToGallery(photoBlob, videoBlob, isLive) {
   galleryItems.unshift(item);
   activeItemIndex = 0;
 
+  // 1. Simpan permanen ke IndexedDB
+  savePhotoToDB(item);
+
+  // 2. Simpan otomatis ke Galeri HP (Download / DCIM)
+  if (isAutoSaveActive) {
+    autoSaveToDeviceGallery(item);
+  }
+
   // Update thumbnail in bottom-left
   thumbImg.src = item.photoUrl;
   thumbImg.style.display = 'block';
@@ -607,7 +766,11 @@ function saveCaptureToGallery(photoBlob, videoBlob, isLive) {
   thumbCount.style.display = 'block';
   galleryThumb.style.display = 'flex';
 
-  showToast(isLive ? 'Foto-Live Tersimpan ◎' : 'Foto Tersimpan 📸', 1800);
+  if (isAutoSaveActive) {
+    showToast(isLive ? 'Foto-Live otomatis tersimpan ke Galeri HP! ◎' : 'Foto otomatis tersimpan ke Galeri HP! 📸', 2200);
+  } else {
+    showToast(isLive ? 'Foto-Live tersimpan di galeri ◎' : 'Foto tersimpan di galeri 📸', 1800);
+  }
 }
 
 galleryThumb.addEventListener('click', () => {
@@ -617,6 +780,36 @@ galleryThumb.addEventListener('click', () => {
   }
   openModalViewer(0);
 });
+
+function updateModalNavUI() {
+  if (modalPhotoCounter) {
+    modalPhotoCounter.textContent = `${activeItemIndex + 1} / ${galleryItems.length}`;
+  }
+  if (modalPrevBtn) {
+    modalPrevBtn.classList.toggle('disabled', activeItemIndex >= galleryItems.length - 1);
+  }
+  if (modalNextBtn) {
+    modalNextBtn.classList.toggle('disabled', activeItemIndex <= 0);
+  }
+}
+
+if (modalPrevBtn) {
+  modalPrevBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activeItemIndex < galleryItems.length - 1) {
+      openModalViewer(activeItemIndex + 1);
+    }
+  });
+}
+
+if (modalNextBtn) {
+  modalNextBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activeItemIndex > 0) {
+      openModalViewer(activeItemIndex - 1);
+    }
+  });
+}
 
 function openModalViewer(index) {
   activeItemIndex = index;
@@ -639,6 +832,8 @@ function openModalViewer(index) {
     holdHint.style.display = 'none';
     downloadVideoBtn.style.display = 'none';
   }
+
+  updateModalNavUI();
 
   // Setup download links
   downloadPhotoBtn.onclick = () => {
@@ -668,12 +863,18 @@ closeModalBtn.addEventListener('click', () => {
 
 // Delete active capture
 deleteBtn.addEventListener('click', () => {
-  if (confirm('Hapus foto ini?')) {
+  if (confirm('Hapus foto ini dari galeri?')) {
+    const deletedItem = galleryItems[activeItemIndex];
+    if (deletedItem) {
+      deletePhotoFromDB(deletedItem.id);
+    }
+
     galleryItems.splice(activeItemIndex, 1);
     if (galleryItems.length > 0) {
+      const nextIndex = Math.min(activeItemIndex, galleryItems.length - 1);
       thumbCount.textContent = galleryItems.length;
       thumbImg.src = galleryItems[0].photoUrl;
-      openModalViewer(0);
+      openModalViewer(nextIndex);
     } else {
       modal.classList.remove('active');
       thumbImg.src = '';
@@ -683,7 +884,7 @@ deleteBtn.addEventListener('click', () => {
       thumbCount.style.display = 'none';
       thumbCount.textContent = '0';
     }
-    showToast('Foto dihapus');
+    showToast('Foto dihapus dari galeri');
   }
 });
 
@@ -745,9 +946,11 @@ interactiveArea.addEventListener('pointerleave', stopMotionPlayback);
 interactiveArea.addEventListener('pointercancel', stopMotionPlayback);
 
 // ==========================================
-// 5. INITIALIZATION
+// 6. INITIALIZATION
 // ==========================================
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
+  updateAutoSaveUI();
+  await loadPhotosFromDB();
   checkStandaloneMode();
   startCamera();
 });

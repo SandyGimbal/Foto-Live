@@ -533,6 +533,46 @@ html, body {
   display: none;
 }
 
+/* Modal Navigation Arrows */
+.modal-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 15;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.modal-nav-btn:active {
+  transform: translateY(-50%) scale(0.9);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.modal-nav-btn.prev {
+  left: 12px;
+}
+
+.modal-nav-btn.next {
+  right: 12px;
+}
+
+.modal-nav-btn.disabled {
+  opacity: 0.15;
+  pointer-events: none;
+}
+
 /* Floating "Hold to Play" Toast */
 .hold-hint-badge {
   position: absolute;
@@ -764,3 +804,28 @@ html, body {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+@media (max-width: 480px) {
+  .top-bar {
+    padding: var(--safe-top) 8px 0 8px;
+  }
+  .top-bar-left, .top-bar-right, .top-bar-center {
+    gap: 5px;
+  }
+  .btn-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+  .badge-live {
+    padding: 4px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .btn-install-shortcut {
+    padding: 5px 8px;
+    font-size: 10.5px;
+    gap: 4px;
+  }
+}
+

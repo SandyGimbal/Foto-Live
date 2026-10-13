@@ -48,6 +48,10 @@
       </div>
 
       <div class="top-bar-right">
+        <!-- Auto-Save to Gallery Toggle -->
+        <button id="autosave-toggle" class="btn-icon active" title="Otomatis Simpan ke Galeri HP">
+          💾
+        </button>
         <!-- Flash Setting -->
         <button id="flash-toggle" class="btn-icon" title="Flash">⚡</button>
         <!-- Grid Toggle -->
@@ -122,16 +126,21 @@
   <!-- Interactive Live Photo Modal Viewer -->
   <div id="preview-modal" class="modal-viewer">
     <div class="modal-header">
-      <div id="modal-live-badge" class="badge-live active">
-        <span class="live-icon-dot"></span>
-        <span>LIVE</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div id="modal-live-badge" class="badge-live active">
+          <span class="live-icon-dot"></span>
+          <span>LIVE</span>
+        </div>
+        <span id="modal-photo-counter" style="font-size: 13px; color: var(--text-muted); font-weight: 600;">1 / 1</span>
       </div>
       <button id="close-modal-btn" class="btn-icon" style="font-size: 20px;">✕</button>
     </div>
 
     <div id="interactive-area" class="modal-content-area" title="Tahan untuk memutar gerak">
+      <button id="modal-prev-btn" class="modal-nav-btn prev" title="Foto Sebelumnya">‹</button>
       <img id="modal-still-img" alt="Foto Diam">
       <video id="modal-motion-video" playsinline loop muted></video>
+      <button id="modal-next-btn" class="modal-nav-btn next" title="Foto Berikutnya">›</button>
       <div id="hold-hint" class="hold-hint-badge">
         <span>👆 Tahan layar untuk memutar gerak</span>
       </div>
