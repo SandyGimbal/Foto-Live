@@ -29,12 +29,11 @@ let teleRearDeviceId = null;
 let activeDeviceId = null;
 let hwSupportsSub1x = false;
 
-// Sensor calibration so 0.5x (Ultra-Wide), 1x (Normal), and 2x (Tele) ALWAYS work visibly on every device!
-// When a phone only exposes 1 sensor with min zoom = 1.0:
-// - 0.5x uses 1.0x (100% full wide sensor width, zero crop)
-// - 1.0x uses 1.32x (natural 26mm main camera framing)
-// - 2.0x uses 2.64x (52mm 2x optical/digital telephoto framing)
-const BASE_1X_SENSOR_FACTOR = 1.32;
+// Sensor calibration when hardware sub-1x or secondary ultra-wide lens is not used:
+// - 0.5x uses 1.00x (100% full wide sensor width, zero crop)
+// - 1.0x uses 1.18x (natural main camera framing)
+// - 2.0x uses 2.36x (2x telephoto framing)
+const BASE_1X_SENSOR_FACTOR = 1.18;
 
 // Settings persisted in localStorage
 let isAutoSaveActive = localStorage.getItem('fotolive_autosave') !== 'false'; // Default: ON
@@ -370,9 +369,20 @@ if (installSheetBackdrop) {
 }
 
 if ('serviceWorker' in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
+
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').then((reg) => {
+    navigator.serviceWorker.register('sw.js?v=5.2').then((reg) => {
       reg.update();
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
     }).catch((err) => console.warn('SW error:', err));
   });
 }
@@ -403,10 +413,11 @@ async function detectCameraLenses() {
       }
     }
 
-    // On many Android phones (Xiaomi/Poco/Samsung), camera2 back lenses are ordered: [0]=Main 1x, [1 or 2]=Ultra-Wide 0.5x
+    // On Android phones (Xiaomi/Poco/Samsung/Pixel), camera2 back lenses are ordered:
+    // backLenses[0] = Main 1x Wide, backLenses[1] = Ultra-Wide 0.5x
     if (!ultraWideDeviceId && backLenses.length >= 2) {
       mainRearDeviceId = backLenses[0].deviceId;
-      ultraWideDeviceId = backLenses[backLenses.length - 1].deviceId;
+      ultraWideDeviceId = backLenses[1].deviceId;
     }
   } catch (e) {
     console.warn('Lens detection error:', e);
@@ -431,9 +442,8 @@ async function startCamera(preferredDeviceId = null) {
     ? { deviceId: { exact: preferredDeviceId }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } }
     : { facingMode: { ideal: currentFacingMode }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
 
-  // Try with audio first (for Live Photo & Video sound), fallback to video-only if mic denied
+  // Request video stream first so camera opens immediately without waiting on microphone permission
   const constraintCandidates = [
-    { video: videoConstraintBase, audio: true },
     { video: videoConstraintBase, audio: false },
     { video: { facingMode: currentFacingMode }, audio: false },
     { video: true, audio: false }
@@ -464,6 +474,10 @@ async function startCamera(preferredDeviceId = null) {
   videoEl.srcObject = stream;
   videoEl.muted = true; // Keep preview muted to prevent speaker echo
 
+  try {
+    await videoEl.play();
+  } catch (e) {}
+
   // Detect available lenses once permission is granted
   await detectCameraLenses();
 
@@ -484,10 +498,6 @@ async function startCamera(preferredDeviceId = null) {
   }
 
   await applyHardwareAndDigitalZoom(currentZoom);
-
-  try {
-    await videoEl.play();
-  } catch (e) {}
 
   if (flashMode === 'torch') {
     setHardwareTorch(true);
@@ -1273,9 +1283,18 @@ function getOutputDimensions() {
   const srcH = isSimulationMode ? simCanvas.height : (videoEl.videoHeight || 1080);
 
   let targetRatio = srcW / srcH;
-  if (aspectRatio === '4:3') targetRatio = srcH > srcW ? 3 / 4 : 4 / 3;
-  else if (aspectRatio === '16:9') targetRatio = srcH > srcW ? 9 / 16 : 16 / 9;
-  else if (aspectRatio === '1:1') targetRatio = 1;
+  if (aspectRatio === 'full' && viewfinderFrame) {
+    const rect = viewfinderFrame.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      targetRatio = rect.width / rect.height;
+    }
+  } else if (aspectRatio === '4:3') {
+    targetRatio = srcH > srcW ? 3 / 4 : 4 / 3;
+  } else if (aspectRatio === '16:9') {
+    targetRatio = srcH > srcW ? 9 / 16 : 16 / 9;
+  } else if (aspectRatio === '1:1') {
+    targetRatio = 1;
+  }
 
   let outW = srcW;
   let outH = srcH;

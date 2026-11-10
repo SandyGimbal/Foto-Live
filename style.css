@@ -321,11 +321,14 @@ html, body {
 
 #camera-video,
 .sim-canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   transform-origin: center center;
   transition: transform 0.15s ease-out, filter 0.25s ease;
+  z-index: 1;
 }
 
 .viewfinder-frame.camera-switching #camera-video {
