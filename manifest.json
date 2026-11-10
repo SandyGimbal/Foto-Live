@@ -1,18 +1,19 @@
 {
-  "id": "foto-live-pwa",
-  "name": "Foto-Live",
+  "id": "./",
+  "name": "Kamera Foto-Live Pro",
   "short_name": "Foto-Live",
-  "description": "Kamera Foto-Live modern dengan tangkapan foto gerak instan, efek anti-gravitasi, dan pratinjau interaktif.",
-  "start_url": "./index.html",
+  "description": "Kamera Foto-Live & Video HD dengan penyimpanan otomatis ke Galeri HP, fokus sentuh, zoom optik/digital, dan pratinjau Live Photo interaktif.",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
-  "orientation": "portrait-primary",
-  "background_color": "#050507",
-  "theme_color": "#050507",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "lang": "id-ID",
   "dir": "ltr",
-  "categories": ["photo", "utilities", "multimedia"],
+  "prefer_related_applications": false,
+  "categories": ["photo", "photography", "utilities", "multimedia"],
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -39,21 +40,43 @@
       "purpose": "maskable"
     }
   ],
-  "shortcuts": [
+  "screenshots": [
     {
-      "name": "Buka Kamera Langsung",
-      "short_name": "Kamera",
-      "description": "Buka viewfinder kamera untuk mengambil Live Photo",
-      "url": "./index.html?action=camera",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "src": "icons/screenshot-mobile.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Tampilan Kamera Foto-Live"
     },
     {
-      "name": "Buka Galeri Live Photo",
-      "short_name": "Galeri",
-      "description": "Lihat koleksi foto gerak yang telah diambil",
-      "url": "./index.html?action=gallery",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "src": "icons/screenshot-wide.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Kamera Foto-Live Layar Penuh"
     }
   ],
-  "screenshots": []
+  "shortcuts": [
+    {
+      "name": "Ambil Live Photo",
+      "short_name": "Live Photo",
+      "description": "Buka kamera langsung dalam mode Live Photo",
+      "url": "./?mode=live",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Rekam Video",
+      "short_name": "Video",
+      "description": "Buka kamera dalam mode perekaman Video HD",
+      "url": "./?mode=video",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Buka Galeri Foto",
+      "short_name": "Galeri",
+      "description": "Lihat koleksi foto & Live Photo yang tersimpan",
+      "url": "./?action=gallery",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
 }

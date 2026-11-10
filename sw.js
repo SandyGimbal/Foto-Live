@@ -1,7 +1,9 @@
-const CACHE_NAME = 'foto-live-v2.1';
+const CACHE_NAME = 'foto-live-v4.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './style.css',
+  './app.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -9,10 +11,11 @@ const ASSETS_TO_CACHE = [
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
   './icons/icon-32.png',
-  './assets/anti_gravity_preview.jpg'
+  './icons/screenshot-mobile.png',
+  './icons/screenshot-wide.png'
 ];
 
-// Install: pre-cache all core static assets
+// Install: pre-cache all core static assets & skipWaiting immediately
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -23,7 +26,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: clean up old caches and claim clients immediately
+// Activate: clean up all old caches and claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -38,47 +41,45 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: network-first for documents/navigation, cache-first for static assets
+// Listen for skipWaiting message from client
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// Fetch: Network-first with offline cache fallback so updates always appear immediately
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  
-  // Only handle GET requests and http/https schemes
+
   if (req.method !== 'GET' || !req.url.startsWith('http')) {
     return;
   }
 
-  // Camera stream, blobs or video data shouldn't be handled by cache
   if (req.url.startsWith('blob:') || req.url.startsWith('data:')) {
     return;
   }
 
   event.respondWith(
-    caches.match(req).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Fetch in background to update cache (stale-while-revalidate)
-        fetch(req).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, networkResponse));
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-
-      return fetch(req).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-          return networkResponse;
+    fetch(req)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(req, responseClone);
+          });
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(req, responseToCache);
-        });
         return networkResponse;
-      }).catch(() => {
-        // Fallback to cached index.html for navigation
-        if (req.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
-    })
+      })
+      .catch(() => {
+        return caches.match(req).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (req.mode === 'navigate') {
+            return caches.match('./index.html') || caches.match('./');
+          }
+        });
+      })
   );
 });

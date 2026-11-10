@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#070709">
+  <meta name="theme-color" content="#000000">
   
-  <!-- PWA & Mobile Web App Meta Tags -->
-  <title>Foto-Live</title>
-  <meta name="description" content="Aplikasi Kamera Foto-Live modern dengan perekaman gerak instan, mode anti-gravitasi, dan instalasi pintasan layar utama.">
+  <!-- PWA & Mobile Native App Meta Tags -->
+  <title>Foto-Live Camera</title>
+  <meta name="description" content="Kamera Foto-Live & Video HD dengan penyimpanan otomatis ke Galeri HP, fokus sentuh, zoom optik/digital, dan pratinjau Live Photo interaktif.">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Foto-Live">
   <meta name="application-name" content="Foto-Live">
-  <meta name="msapplication-TileColor" content="#070709">
+  <meta name="msapplication-TileColor" content="#000000">
 
   <!-- Manifest & Icons -->
   <link rel="manifest" href="manifest.json">
@@ -26,170 +26,351 @@
 <body>
 
   <div id="app-container">
-    <!-- Top Header Bar -->
+    <!-- ================= NATIVE CAMERA TOP BAR ================= -->
     <header class="top-bar">
       <div class="top-bar-left">
-        <!-- Live Photo Glowing Amber Badge -->
-        <button id="live-toggle" class="badge-live active" title="Beralih Mode LIVE Photo">
-          <span class="live-icon-dot"></span>
-          <span>LIVE</span>
+        <!-- Flash Button (Off / Auto / On / Torch) -->
+        <button id="flash-toggle" class="cam-icon-btn" title="Mode Flash">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span id="flash-badge" class="icon-sub-badge">OFF</span>
         </button>
-        <!-- Anti-Gravity Demo Toggle -->
-        <button id="demo-toggle" class="btn-icon" title="Mode Zero-Gravity Anti-Gravitasi">
-          🌌
+
+        <!-- Live Photo Concentric Icon Button -->
+        <button id="live-toggle" class="cam-icon-btn live-btn active" title="Mode Live Photo (Gerak)">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" fill="currentColor"></circle>
+            <circle cx="12" cy="12" r="6.5"></circle>
+            <circle cx="12" cy="12" r="10" stroke-dasharray="2 3"></circle>
+          </svg>
+          <span id="live-status-text" class="live-pill-text">LIVE</span>
         </button>
       </div>
 
       <div class="top-bar-center">
-        <!-- Quick Install Shortcut Button -->
-        <button id="btn-install" class="btn-install-shortcut" title="Pasang ke Layar Utama">
-          📲 Pasang Pintasan
+        <!-- Video Recording Timer Pill (Hidden unless recording video) -->
+        <div id="video-timer-pill" class="video-timer-pill" style="display: none;">
+          <span class="rec-dot"></span>
+          <span id="video-timer-text">00:00</span>
+        </div>
+
+        <!-- Install App Pill (Auto-hides once installed as standalone PWA) -->
+        <button id="btn-install" class="btn-install-pill" title="Instal Aplikasi Kamera ke HP">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Instal Kamera</span>
         </button>
       </div>
 
       <div class="top-bar-right">
-        <!-- Auto-Save to Gallery Toggle -->
-        <button id="autosave-toggle" class="btn-icon active" title="Otomatis Simpan ke Galeri HP">
-          💾
+        <!-- Timer Toggle (Off / 3s / 10s) -->
+        <button id="timer-toggle" class="cam-icon-btn" title="Timer Kamera">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="13" r="8"></circle>
+            <path d="M12 9v4l2.5 2.5"></path>
+            <path d="M10 2h4"></path>
+          </svg>
+          <span id="timer-badge" class="icon-sub-badge"></span>
         </button>
-        <!-- Flash Setting -->
-        <button id="flash-toggle" class="btn-icon" title="Flash">⚡</button>
-        <!-- Grid Toggle -->
-        <button id="grid-toggle" class="btn-icon" title="Grid 3x3">#</button>
-        <!-- Timer Toggle -->
-        <button id="timer-toggle" class="btn-icon" title="Timer">⏱️</button>
+
+        <!-- Aspect Ratio Button (FULL / 4:3 / 16:9 / 1:1) -->
+        <button id="ratio-toggle" class="cam-icon-btn text-pill-btn" title="Rasio Layar Kamera">
+          <span id="ratio-text">FULL</span>
+        </button>
+
+        <!-- Filter Toggle -->
+        <button id="filter-toggle" class="cam-icon-btn" title="Filter Warna Kamera">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
+          </svg>
+        </button>
+
+        <!-- Quick Settings Drawer Toggle -->
+        <button id="settings-toggle" class="cam-icon-btn" title="Pengaturan Kamera & Simpan Otomatis">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
       </div>
     </header>
 
-    <!-- Main Viewfinder -->
-    <main class="viewfinder-wrapper">
-      <!-- Live Hardware Camera Stream -->
-      <video id="camera-video" autoplay playsinline muted></video>
+    <!-- ================= QUICK CAMERA SETTINGS TRAY ================= -->
+    <div id="settings-tray" class="settings-tray">
+      <div class="settings-tray-header">
+        <span>Pengaturan Kamera Pro</span>
+        <button id="close-settings-btn" class="tray-close-btn">✕</button>
+      </div>
+      <div class="settings-grid">
+        <button id="autosave-toggle" class="setting-tile active">
+          <span class="tile-icon">💾</span>
+          <span class="tile-label">Simpan Otomatis</span>
+          <span id="autosave-state" class="tile-state">AKTIF</span>
+        </button>
+        <button id="autosave-video-toggle" class="setting-tile">
+          <span class="tile-icon">🎬</span>
+          <span class="tile-label">Unduh Klip Live</span>
+          <span id="autosave-video-state" class="tile-state">OFF</span>
+        </button>
+        <button id="grid-toggle" class="setting-tile active">
+          <span class="tile-icon">#</span>
+          <span class="tile-label">Garis Grid 3x3</span>
+          <span id="grid-state" class="tile-state">AKTIF</span>
+        </button>
+        <button id="sound-toggle" class="setting-tile active">
+          <span class="tile-icon">🔊</span>
+          <span class="tile-label">Suara Rana</span>
+          <span id="sound-state" class="tile-state">AKTIF</span>
+        </button>
+        <button id="mirror-toggle" class="setting-tile active">
+          <span class="tile-icon">🪞</span>
+          <span class="tile-label">Cermin Selfie</span>
+          <span id="mirror-state" class="tile-state">AKTIF</span>
+        </button>
+        <button id="tray-install-btn" class="setting-tile highlight-tile">
+          <span class="tile-icon">📲</span>
+          <span class="tile-label">Instal Aplikasi</span>
+          <span id="tray-install-state" class="tile-state">PASANG</span>
+        </button>
+      </div>
+    </div>
 
-      <!-- Zero-G / Fallback Scene (POV Anti-Gravity Floating Room) -->
-      <img id="fallback-viewfinder" class="fallback-viewfinder" src="assets/anti_gravity_preview.jpg" alt="Anti-Gravity Room Preview">
+    <!-- ================= MAIN CAMERA VIEWFINDER ================= -->
+    <main id="viewfinder-wrapper" class="viewfinder-wrapper">
+      <div id="viewfinder-frame" class="viewfinder-frame ratio-full">
+        <!-- Hardware Camera Video Feed -->
+        <video id="camera-video" autoplay playsinline muted></video>
 
-      <!-- FX Canvas (Particle & AR Overlay) -->
-      <canvas id="fx-canvas"></canvas>
+        <!-- Portrait Mode Vignette Layer -->
+        <div id="portrait-vignette" class="portrait-vignette"></div>
 
-      <!-- Grid Overlay (Rule of Thirds) -->
-      <div id="grid-overlay" class="grid-overlay">
-        <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
-        <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
-        <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+        <!-- Rule of Thirds Grid Overlay -->
+        <div id="grid-overlay" class="grid-overlay active">
+          <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+          <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+          <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+        </div>
+
+        <!-- Tap-to-Focus Reticle & Exposure Slider -->
+        <div id="focus-reticle" class="focus-reticle">
+          <div class="focus-box">
+            <span class="focus-tick top"></span>
+            <span class="focus-tick right"></span>
+            <span class="focus-tick bottom"></span>
+            <span class="focus-tick left"></span>
+          </div>
+          <div class="exposure-control" title="Geser untuk mengatur kecerahan (EV)">
+            <span class="sun-icon">☀️</span>
+            <input id="exposure-slider" type="range" min="-2" max="2" step="0.1" value="0" orient="vertical">
+          </div>
+        </div>
+
+        <!-- Camera Permission / Retry Overlay (Only shown if camera permission blocked) -->
+        <div id="camera-permission-overlay" class="camera-permission-overlay" style="display: none;">
+          <div class="perm-card">
+            <div class="perm-icon">📷</div>
+            <h3>Akses Kamera Diperlukan</h3>
+            <p id="perm-desc">Izinkan akses kamera pada browser agar Anda dapat memotret Foto-Live & merekam video secara nyata.</p>
+            <div class="perm-actions">
+              <button id="btn-retry-camera" class="btn-perm-primary">🔄 Aktifkan Kamera</button>
+              <button id="btn-sim-camera" class="btn-perm-secondary">✨ Mode Simulasi Kamera</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Simulation Canvas (Only used if device has no physical camera and user selects simulation) -->
+        <canvas id="sim-canvas" class="sim-canvas" style="display: none;"></canvas>
+
+        <!-- Live Motion Recording Indicator Pill -->
+        <div id="recording-hud" class="recording-hud">
+          <span class="live-hud-dot"></span>
+          <span id="recording-hud-text">LIVE</span>
+        </div>
+
+        <!-- Auto-Save Confirmation Badge -->
+        <div id="saved-badge" class="saved-badge">
+          <span>✓ Tersimpan di Galeri</span>
+        </div>
+
+        <!-- Countdown Overlay -->
+        <div id="countdown-overlay" class="countdown-overlay">
+          <div id="countdown-number" class="countdown-number">3</div>
+        </div>
+
+        <!-- Screen Flash / Retina Flash Effect -->
+        <div id="flash-screen" class="flash-screen"></div>
       </div>
 
-      <!-- Recording Motion HUD -->
-      <div id="recording-hud" class="recording-hud">
-        <span class="rec-pulse-dot"></span>
-        <span>Merekam Gerak Live...</span>
+      <!-- Color Filter Strip (Toggled by Filter button) -->
+      <div id="filter-strip" class="filter-strip">
+        <button class="filter-chip active" data-filter="none">Normal</button>
+        <button class="filter-chip" data-filter="vivid">Vivid</button>
+        <button class="filter-chip" data-filter="warm">Hangat</button>
+        <button class="filter-chip" data-filter="cool">Sejuk</button>
+        <button class="filter-chip" data-filter="dramatic">Sinematik</button>
+        <button class="filter-chip" data-filter="mono">Hitam Putih</button>
       </div>
 
-      <!-- Countdown Overlay -->
-      <div id="countdown-overlay" class="countdown-overlay">
-        <div id="countdown-number" class="countdown-number">3</div>
+      <!-- Optical / Digital Zoom Selector Pills -->
+      <div class="zoom-controls">
+        <button class="zoom-btn" data-zoom="0.5">0.5</button>
+        <button class="zoom-btn active" data-zoom="1">1<span>x</span></button>
+        <button class="zoom-btn" data-zoom="2">2</button>
+        <button class="zoom-btn" data-zoom="3">3</button>
       </div>
 
-      <!-- Screen Flash Effect -->
-      <div id="flash-screen" class="flash-screen"></div>
-
-      <!-- Offscreen Canvas for Frame Capture -->
+      <!-- Offscreen Canvas for High-Res Photo Capture -->
       <canvas id="capture-canvas" style="display: none;"></canvas>
     </main>
 
-    <!-- Bottom Controls Bar -->
+    <!-- ================= NATIVE CAMERA BOTTOM DECK ================= -->
     <footer class="bottom-bar">
-      <!-- Thumbnail Gallery Button -->
-      <div id="gallery-thumb" class="btn-gallery-thumb" title="Buka Galeri Foto">
-        <span id="thumb-icon" style="font-size: 20px;">🖼️</span>
-        <img id="thumb-img" src="" alt="Foto" style="display: none;">
-        <span id="thumb-count" class="thumb-count-badge" style="display: none;">0</span>
+      <!-- Camera Mode Dial -->
+      <div class="mode-selector" id="mode-selector">
+        <button class="mode-item" data-mode="portrait">POTRET</button>
+        <button class="mode-item" data-mode="photo">FOTO</button>
+        <button class="mode-item active" data-mode="live">LIVE FOTO</button>
+        <button class="mode-item" data-mode="video">VIDEO</button>
       </div>
 
-      <!-- Concentric Rings Shutter Button -->
-      <div id="shutter-btn" class="shutter-wrapper live-active" title="Ambil Live Photo">
-        <div class="shutter-outer-ring"></div>
-        <div class="shutter-middle-ring"></div>
-        <div class="shutter-inner-core"></div>
-      </div>
+      <!-- Main Shutter Controls Row -->
+      <div class="shutter-row">
+        <!-- Bottom-Left Camera Roll Thumbnail -->
+        <div id="gallery-thumb" class="btn-gallery-thumb" title="Buka Galeri Foto & Video">
+          <span id="thumb-icon" class="thumb-placeholder-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="3" width="18" height="18" rx="3" ry="3"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+          </span>
+          <img id="thumb-img" src="" alt="Galeri" style="display: none;">
+          <span id="thumb-count" class="thumb-count-badge" style="display: none;">0</span>
+        </div>
 
-      <!-- Switch / Flip Camera Button -->
-      <button id="flip-btn" class="btn-flip-cam" title="Balik Kamera Depan / Belakang">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 10c0-4.418-3.582-8-8-8s-8 3.582-8 8c0 1.956.702 3.748 1.87 5.143L4 17h6v-6l-2.072 2.072C7.035 12.012 6.5 10.57 6.5 9c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5c0 1.57-.535 3.012-1.428 4.072"/>
-          <path d="M4 14c0 4.418 3.582 8 8 8s8-3.582 8-8c0-1.956-.702-3.748-1.87-5.143L20 7h-6v6l2.072-2.072C16.965 11.988 17.5 13.43 17.5 15c0 3.038-2.462-5.5-5.5 5.5s-5.5-2.462-5.5-5.5c0-1.57.535-3.012 1.428-4.072"/>
-        </svg>
-      </button>
+        <!-- Center Flagship Shutter Button -->
+        <button id="shutter-btn" class="shutter-wrapper live-active" aria-label="Ambil Foto atau Video">
+          <div class="shutter-outer-ring"></div>
+          <div class="shutter-middle-ring"></div>
+          <div class="shutter-inner-core"></div>
+        </button>
+
+        <!-- Bottom-Right Flip Camera Button -->
+        <button id="flip-btn" class="btn-flip-cam" title="Putar Kamera Depan / Belakang">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 10c0-4.418-3.582-8-8-8s-8 3.582-8 8c0 1.956.702 3.748 1.87 5.143L4 17h6v-6l-2.072 2.072C7.035 12.012 6.5 10.57 6.5 9c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5c0 1.57-.535 3.012-1.428 4.072"/>
+            <path d="M4 14c0 4.418 3.582 8 8 8s8-3.582 8-8c0-1.956-.702-3.748-1.87-5.143L20 7h-6v6l2.072-2.072C16.965 11.988 17.5 13.43 17.5 15c0 3.038-2.462 5.5-5.5 5.5s-5.5-2.462-5.5-5.5c0-1.57.535-3.012 1.428-4.072"/>
+          </svg>
+        </button>
+      </div>
     </footer>
   </div>
 
-  <!-- Interactive Live Photo Modal Viewer -->
+  <!-- ================= IN-APP CAMERA ROLL & LIVE PHOTO VIEWER ================= -->
   <div id="preview-modal" class="modal-viewer">
     <div class="modal-header">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <div id="modal-live-badge" class="badge-live active">
-          <span class="live-icon-dot"></span>
-          <span>LIVE</span>
+      <div class="modal-header-left">
+        <button id="close-modal-btn" class="cam-icon-btn" title="Kembali ke Kamera">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <div class="modal-meta">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div id="modal-live-badge" class="badge-live active">
+              <span class="live-icon-dot"></span>
+              <span id="modal-badge-text">LIVE</span>
+            </div>
+            <span id="modal-photo-counter" class="modal-counter-text">1 / 1</span>
+          </div>
+          <span id="modal-timestamp" class="modal-time-text">Baru saja</span>
         </div>
-        <span id="modal-photo-counter" style="font-size: 13px; color: var(--text-muted); font-weight: 600;">1 / 1</span>
       </div>
-      <button id="close-modal-btn" class="btn-icon" style="font-size: 20px;">✕</button>
+
+      <button id="play-live-btn" class="btn-play-live" title="Putar Gerak Live Photo">
+        ▶ Putar Live
+      </button>
     </div>
 
-    <div id="interactive-area" class="modal-content-area" title="Tahan untuk memutar gerak">
+    <div id="interactive-area" class="modal-content-area" title="Tahan layar untuk memutar gerak Live Photo">
       <button id="modal-prev-btn" class="modal-nav-btn prev" title="Foto Sebelumnya">‹</button>
-      <img id="modal-still-img" alt="Foto Diam">
-      <video id="modal-motion-video" playsinline loop muted></video>
+      <img id="modal-still-img" alt="Pratinjau Foto">
+      <video id="modal-motion-video" playsinline loop></video>
       <button id="modal-next-btn" class="modal-nav-btn next" title="Foto Berikutnya">›</button>
       <div id="hold-hint" class="hold-hint-badge">
-        <span>👆 Tahan layar untuk memutar gerak</span>
+        <span>👆 Sentuh & tahan foto untuk memutar gerak Live</span>
       </div>
     </div>
 
+    <!-- Thumbnail Filmstrip Scrubber -->
+    <div id="modal-filmstrip" class="modal-filmstrip"></div>
+
     <div class="modal-footer">
-      <button id="share-btn" class="btn-action" title="Bagikan">
+      <button id="share-btn" class="btn-action" title="Bagikan ke WhatsApp / Sosial Media">
         📤 Bagikan
       </button>
       <button id="download-photo-btn" class="btn-action primary">
-        💾 Unduh JPG
+        💾 Simpan Foto
       </button>
       <button id="download-video-btn" class="btn-action">
-        🎬 Klip Gerak
+        🎬 Simpan Video
       </button>
-      <button id="delete-btn" class="btn-action danger" title="Hapus Foto">
+      <button id="delete-btn" class="btn-action danger" title="Hapus">
         🗑️
       </button>
     </div>
   </div>
 
-  <!-- PWA Install / Shortcut Bottom Sheet Guidance -->
+  <!-- ================= PWA INSTALL / SHORTCUT SHEET ================= -->
   <div id="install-sheet-backdrop" class="install-sheet-backdrop">
     <div class="install-sheet">
       <div class="sheet-handle"></div>
-      <div class="sheet-title">
-        <span>📲 Pasang Pintasan di Layar Utama</span>
+      <div class="sheet-app-header">
+        <img src="icons/icon-192.png" alt="Foto-Live Icon" class="sheet-app-icon">
+        <div>
+          <div class="sheet-title">Kamera Foto-Live Pro</div>
+          <div class="sheet-subtitle">Aplikasi Kamera Layar Penuh • Otomatis Simpan Galeri</div>
+        </div>
       </div>
-      <p class="sheet-desc">
-        Pasang aplikasi ini ke layar utama ponsel Anda agar dapat dibuka seperti aplikasi kamera bawaan secara instan dan fullscreen!
+
+      <p id="install-status-msg" class="sheet-desc">
+        Instal aplikasi kamera ini ke layar utama HP Anda agar dapat dibuka langsung layar penuh seperti kamera bawaan HP!
       </p>
+
+      <div id="install-native-box" class="install-native-box" style="display: none;">
+        <button id="btn-trigger-install" class="btn-primary-install pulse-btn">
+          📲 Instal Aplikasi Sekarang (1-Klik)
+        </button>
+      </div>
 
       <div class="sheet-steps">
         <div class="step-item">
           <span class="step-number">1</span>
-          <span><strong>Di Android (Chrome / Poco / Xiaomi):</strong> Ketuk tombol <em>"Pasang Sekarang"</em> di bawah, atau ketuk menu titik tiga (⋮) di pojok kanan atas browser lalu pilih <strong>"Tambahkan ke Layar Utama"</strong> atau <strong>"Instal Aplikasi"</strong>.</span>
+          <div>
+            <strong>Android (Chrome / Xiaomi / Poco / Samsung):</strong><br>
+            Ketuk tombol <strong>"Instal Aplikasi Sekarang"</strong>, atau ketuk ikon titik tiga <strong>(⋮)</strong> di pojok kanan atas browser lalu pilih <strong>"Instal aplikasi" (Install app)</strong> atau <strong>"Tambahkan ke Layar Utama"</strong>.
+          </div>
         </div>
         <div class="step-item">
           <span class="step-number">2</span>
-          <span><strong>Di iPhone / iPad (Safari):</strong> Ketuk ikon <strong>Bagikan (Share)</strong> di bilah bawah browser, lalu gulir dan pilih <strong>"Tambah ke Layar Utama" (Add to Home Screen)</strong>.</span>
+          <div>
+            <strong>iPhone / iPad (Safari):</strong><br>
+            Ketuk tombol <strong>Bagikan (Share ⬆️)</strong> di bagian bawah Safari, lalu pilih <strong>"Tambah ke Layar Utama" (Add to Home Screen)</strong>.
+          </div>
         </div>
       </div>
 
       <div class="sheet-actions">
-        <button id="btn-trigger-install" class="btn-primary-install">
-          🚀 Pasang Sekarang
-        </button>
         <button id="btn-close-sheet" class="btn-close-sheet">
-          Tutup
+          Mengerti & Tutup
         </button>
       </div>
     </div>

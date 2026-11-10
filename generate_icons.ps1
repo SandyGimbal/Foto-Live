@@ -108,3 +108,42 @@ Create-AppIcon -size 192 -outputPath "icons/icon-maskable-192.png" -maskable $tr
 Create-AppIcon -size 512 -outputPath "icons/icon-maskable-512.png" -maskable $true
 Create-AppIcon -size 180 -outputPath "icons/apple-touch-icon.png" -maskable $false
 Create-AppIcon -size 32  -outputPath "icons/icon-32.png" -maskable $false
+
+function Create-AppScreenshot {
+    param(
+        [int]$width,
+        [int]$height,
+        [string]$outputPath
+    )
+    $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+    $g = [System.Drawing.Graphics]::FromImage($bitmap)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+    # Dark camera UI background
+    $bgBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 8, 8, 12))
+    $g.FillRectangle($bgBrush, 0, 0, $width, $height)
+
+    # Center focus reticle
+    $cx = $width / 2
+    $cy = $height / 2
+    $rSize = [Math]::Min($width, $height) * 0.22
+    $amberPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(220, 255, 195, 0), 4)
+    $g.DrawRectangle($amberPen, [float]($cx - $rSize/2), [float]($cy - $rSize/2), [float]$rSize, [float]$rSize)
+
+    # Shutter button at bottom
+    $shutterY = $height - ([Math]::Min($width, $height) * 0.18)
+    $shutterR = [Math]::Min($width, $height) * 0.08
+    $whitePen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 255, 255, 255), 5)
+    $whiteBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(255, 255, 255, 255))
+    $g.DrawEllipse($whitePen, [float]($cx - $shutterR), [float]($shutterY - $shutterR), [float]($shutterR * 2), [float]($shutterR * 2))
+    $innerR = $shutterR * 0.78
+    $g.FillEllipse($whiteBrush, [float]($cx - $innerR), [float]($shutterY - $innerR), [float]($innerR * 2), [float]($innerR * 2))
+
+    $bitmap.Save($outputPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    $g.Dispose()
+    $bitmap.Dispose()
+    Write-Output "Created screenshot: $outputPath"
+}
+
+Create-AppScreenshot -width 1080 -height 1920 -outputPath "icons/screenshot-mobile.png"
+Create-AppScreenshot -width 1920 -height 1080 -outputPath "icons/screenshot-wide.png"

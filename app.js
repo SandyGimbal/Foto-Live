@@ -1,25 +1,146 @@
-// ==========================================
-// LIVE PHOTO CAMERA - ADVANCED PWA ENGINE
-// ==========================================
+// ============================================================================
+// FOTO-LIVE PRO CAMERA ENGINE - NATIVE CAMERA UI, LIVE PHOTO & AUTO-SAVE PWA
+// ============================================================================
 
-// --- State Variables ---
+// --- Camera & App State ---
 let currentStream = null;
-let currentFacingMode = 'environment';
+let currentFacingMode = 'environment'; // 'environment' (Belakang) | 'user' (Depan)
+let cameraMode = 'live'; // 'portrait' | 'photo' | 'live' | 'video'
 let isLiveActive = true;
 let isCapturing = false;
-let flashMode = 'off'; // 'off' | 'on' | 'auto'
-let gridActive = false;
+let isRecordingVideo = false;
+let videoMediaRecorder = null;
+let videoRecordedChunks = [];
+let videoTimerInterval = null;
+let videoStartTime = 0;
+
+let flashMode = 'off'; // 'off' | 'auto' | 'on' | 'torch'
 let timerSeconds = 0; // 0 | 3 | 10
-let isDemoMode = false;
+let aspectRatio = 'full'; // 'full' | '4:3' | '16:9' | '1:1'
+let activeFilter = 'none'; // 'none' | 'vivid' | 'warm' | 'cool' | 'dramatic' | 'mono'
+let currentZoom = 1;
+let currentExposure = 0; // -2.0 to +2.0
+
+// Settings persisted in localStorage
+let isAutoSaveActive = localStorage.getItem('fotolive_autosave') !== 'false'; // Default: ON
+let isAutoSaveVideoClip = localStorage.getItem('fotolive_autosave_clip') === 'true'; // Default: OFF (agar tidak double download popup)
+let isGridActive = localStorage.getItem('fotolive_grid') !== 'false'; // Default: ON
+let isSoundActive = localStorage.getItem('fotolive_sound') !== 'false'; // Default: ON
+let isMirrorSelfie = localStorage.getItem('fotolive_mirror') !== 'false'; // Default: ON
+
+let isSimulationMode = false;
+let simAnimFrame = null;
 let deferredInstallPrompt = null;
-let isAutoSaveActive = localStorage.getItem('fotolive_autosave') !== 'false'; // default aktif
 let db = null;
 
-// Photo Gallery Storage (Current Session & Recent Captures)
+// Gallery state
 let galleryItems = [];
-let activeItemIndex = -1;
+let activeItemIndex = 0;
 
-// Audio Context for Native Shutter & Live Sounds
+// --- Filter CSS Definitions ---
+const FILTER_MAP = {
+  none: 'none',
+  vivid: 'saturate(1.45) contrast(1.12)',
+  warm: 'sepia(0.28) saturate(1.35) brightness(1.03)',
+  cool: 'hue-rotate(14deg) saturate(1.15) brightness(1.02)',
+  dramatic: 'contrast(1.32) saturate(0.82) brightness(0.94)',
+  mono: 'grayscale(1) contrast(1.22)'
+};
+
+// --- DOM Elements ---
+const videoEl = document.getElementById('camera-video');
+const simCanvas = document.getElementById('sim-canvas');
+const captureCanvas = document.getElementById('capture-canvas');
+const viewfinderWrapper = document.getElementById('viewfinder-wrapper');
+const viewfinderFrame = document.getElementById('viewfinder-frame');
+const portraitVignette = document.getElementById('portrait-vignette');
+const gridOverlay = document.getElementById('grid-overlay');
+const focusReticle = document.getElementById('focus-reticle');
+const exposureSlider = document.getElementById('exposure-slider');
+const permOverlay = document.getElementById('camera-permission-overlay');
+const permDesc = document.getElementById('perm-desc');
+const btnRetryCamera = document.getElementById('btn-retry-camera');
+const btnSimCamera = document.getElementById('btn-sim-camera');
+
+const recordingHud = document.getElementById('recording-hud');
+const recordingHudText = document.getElementById('recording-hud-text');
+const savedBadge = document.getElementById('saved-badge');
+const countdownOverlay = document.getElementById('countdown-overlay');
+const countdownNumber = document.getElementById('countdown-number');
+const flashScreen = document.getElementById('flash-screen');
+
+// Top Bar Controls
+const flashToggle = document.getElementById('flash-toggle');
+const flashBadge = document.getElementById('flash-badge');
+const liveToggle = document.getElementById('live-toggle');
+const liveStatusText = document.getElementById('live-status-text');
+const videoTimerPill = document.getElementById('video-timer-pill');
+const videoTimerText = document.getElementById('video-timer-text');
+const installBtn = document.getElementById('btn-install');
+const timerToggle = document.getElementById('timer-toggle');
+const timerBadge = document.getElementById('timer-badge');
+const ratioToggle = document.getElementById('ratio-toggle');
+const ratioText = document.getElementById('ratio-text');
+const filterToggle = document.getElementById('filter-toggle');
+const filterStrip = document.getElementById('filter-strip');
+const settingsToggle = document.getElementById('settings-toggle');
+const settingsTray = document.getElementById('settings-tray');
+const closeSettingsBtn = document.getElementById('close-settings-btn');
+
+// Settings Tray Buttons
+const autosaveToggle = document.getElementById('autosave-toggle');
+const autosaveState = document.getElementById('autosave-state');
+const autosaveVideoToggle = document.getElementById('autosave-video-toggle');
+const autosaveVideoState = document.getElementById('autosave-video-state');
+const gridToggle = document.getElementById('grid-toggle');
+const gridState = document.getElementById('grid-state');
+const soundToggle = document.getElementById('sound-toggle');
+const soundState = document.getElementById('sound-state');
+const mirrorToggle = document.getElementById('mirror-toggle');
+const mirrorState = document.getElementById('mirror-state');
+const trayInstallBtn = document.getElementById('tray-install-btn');
+const trayInstallState = document.getElementById('tray-install-state');
+
+// Bottom Controls
+const modeSelector = document.getElementById('mode-selector');
+const shutterBtn = document.getElementById('shutter-btn');
+const flipBtn = document.getElementById('flip-btn');
+const galleryThumb = document.getElementById('gallery-thumb');
+const thumbImg = document.getElementById('thumb-img');
+const thumbIcon = document.getElementById('thumb-icon');
+const thumbCount = document.getElementById('thumb-count');
+
+// Modal Viewer Elements
+const modal = document.getElementById('preview-modal');
+const modalStillImg = document.getElementById('modal-still-img');
+const modalMotionVideo = document.getElementById('modal-motion-video');
+const modalLiveBadge = document.getElementById('modal-live-badge');
+const modalBadgeText = document.getElementById('modal-badge-text');
+const modalPhotoCounter = document.getElementById('modal-photo-counter');
+const modalTimestamp = document.getElementById('modal-timestamp');
+const playLiveBtn = document.getElementById('play-live-btn');
+const modalPrevBtn = document.getElementById('modal-prev-btn');
+const modalNextBtn = document.getElementById('modal-next-btn');
+const holdHint = document.getElementById('hold-hint');
+const interactiveArea = document.getElementById('interactive-area');
+const modalFilmstrip = document.getElementById('modal-filmstrip');
+const closeModalBtn = document.getElementById('close-modal-btn');
+const downloadPhotoBtn = document.getElementById('download-photo-btn');
+const downloadVideoBtn = document.getElementById('download-video-btn');
+const deleteBtn = document.getElementById('delete-btn');
+const shareBtn = document.getElementById('share-btn');
+
+// Install Sheet
+const installSheetBackdrop = document.getElementById('install-sheet-backdrop');
+const installNativeBox = document.getElementById('install-native-box');
+const installStatusMsg = document.getElementById('install-status-msg');
+const btnTriggerInstall = document.getElementById('btn-trigger-install');
+const btnCloseSheet = document.getElementById('btn-close-sheet');
+const toastEl = document.getElementById('toast');
+
+// ============================================================================
+// 1. AUDIO & HAPTIC ENGINE (REAL CAMERA SOUND & VIBRATION)
+// ============================================================================
 let audioCtx = null;
 
 function initAudio() {
@@ -29,18 +150,27 @@ function initAudio() {
   }
 }
 
+function triggerHaptic(ms = 18) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(ms);
+  } catch (e) {}
+}
+
 function playShutterSound() {
+  triggerHaptic(25);
+  if (!isSoundActive) return;
   try {
     initAudio();
     if (!audioCtx) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
-    // Synthesize realistic camera mechanical click
-    const bufferSize = audioCtx.sampleRate * 0.08;
+    const now = audioCtx.currentTime;
+    // Realistic two-part mechanical mirror slap + shutter blade click
+    const bufferSize = Math.floor(audioCtx.sampleRate * 0.065);
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.25));
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.2));
     }
 
     const noise = audioCtx.createBufferSource();
@@ -48,362 +178,678 @@ function playShutterSound() {
 
     const filter = audioCtx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(1400, audioCtx.currentTime);
-    filter.Q.setValueAtTime(2.5, audioCtx.currentTime);
+    filter.frequency.setValueAtTime(1600, now);
+    filter.Q.setValueAtTime(2.0, now);
 
     const gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(0.7, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.85, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
 
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(audioCtx.destination);
-    noise.start();
-  } catch (e) {
-    console.warn('Audio play error:', e);
-  }
+    noise.start(now);
+  } catch (e) {}
 }
 
-function playLiveChime() {
+function playFocusSound() {
+  triggerHaptic(10);
+  if (!isSoundActive) return;
   try {
     initAudio();
     if (!audioCtx) return;
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
+    const now = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
-    
-    // Warm rising two-tone Live chime
-    const now = audioCtx.currentTime;
-    osc.frequency.setValueAtTime(880, now);
-    osc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.12);
+    osc.frequency.setValueAtTime(1950, now);
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.04);
+  } catch (e) {}
+}
 
-    gain.gain.setValueAtTime(0.18, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+function playVideoBeep(isStart = true) {
+  triggerHaptic(isStart ? [20, 40, 20] : 30);
+  if (!isSoundActive) return;
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(isStart ? 880 : 660, now);
+    osc.frequency.exponentialRampToValueAtTime(isStart ? 1174 : 440, now + 0.11);
+
+    gain.gain.setValueAtTime(0.16, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
 
     osc.connect(gain);
     gain.connect(audioCtx.destination);
     osc.start(now);
-    osc.stop(now + 0.23);
-  } catch (e) {
-    console.warn('Live chime error:', e);
-  }
+    osc.stop(now + 0.17);
+  } catch (e) {}
 }
 
-// --- DOM Elements ---
-const videoEl = document.getElementById('camera-video');
-const fxCanvas = document.getElementById('fx-canvas');
-const captureCanvas = document.getElementById('capture-canvas');
-const fallbackImg = document.getElementById('fallback-viewfinder');
-const gridOverlay = document.getElementById('grid-overlay');
-const flashScreen = document.getElementById('flash-screen');
-const recordingHud = document.getElementById('recording-hud');
-const countdownOverlay = document.getElementById('countdown-overlay');
-const countdownNumber = document.getElementById('countdown-number');
-
-// Top Controls
-const liveToggle = document.getElementById('live-toggle');
-const autosaveToggle = document.getElementById('autosave-toggle');
-const flashToggle = document.getElementById('flash-toggle');
-const gridToggle = document.getElementById('grid-toggle');
-const timerToggle = document.getElementById('timer-toggle');
-const demoToggle = document.getElementById('demo-toggle');
-const installBtn = document.getElementById('btn-install');
-
-// Bottom Controls
-const shutterBtn = document.getElementById('shutter-btn');
-const flipBtn = document.getElementById('flip-btn');
-const galleryThumb = document.getElementById('gallery-thumb');
-const thumbImg = document.getElementById('thumb-img');
-const thumbCount = document.getElementById('thumb-count');
-
-// Modal Elements
-const modal = document.getElementById('preview-modal');
-const modalStillImg = document.getElementById('modal-still-img');
-const modalMotionVideo = document.getElementById('modal-motion-video');
-const modalLiveBadge = document.getElementById('modal-live-badge');
-const modalPhotoCounter = document.getElementById('modal-photo-counter');
-const modalPrevBtn = document.getElementById('modal-prev-btn');
-const modalNextBtn = document.getElementById('modal-next-btn');
-const holdHint = document.getElementById('hold-hint');
-const interactiveArea = document.getElementById('interactive-area');
-const closeModalBtn = document.getElementById('close-modal-btn');
-const downloadPhotoBtn = document.getElementById('download-photo-btn');
-const downloadVideoBtn = document.getElementById('download-video-btn');
-const deleteBtn = document.getElementById('delete-btn');
-const shareBtn = document.getElementById('share-btn');
-
-// Install Sheet
-const installSheetBackdrop = document.getElementById('install-sheet-backdrop');
-const btnTriggerInstall = document.getElementById('btn-trigger-install');
-const btnCloseSheet = document.getElementById('btn-close-sheet');
-const toastEl = document.getElementById('toast');
-
-// --- Toast Utility ---
-function showToast(message, duration = 3000) {
+// --- Toast & Saved Badge ---
+let toastTimer = null;
+function showToast(message, duration = 2200) {
+  if (!toastEl) return;
   toastEl.textContent = message;
   toastEl.classList.add('show');
-  setTimeout(() => {
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
     toastEl.classList.remove('show');
   }, duration);
 }
 
-// ==========================================
-// 1. PWA INSTALL & SHORTCUT MANAGEMENT
-// ==========================================
+let savedBadgeTimer = null;
+function showSavedBadge(text = '✓ Tersimpan di Galeri HP') {
+  if (!savedBadge) return;
+  savedBadge.textContent = text;
+  savedBadge.classList.add('show');
+  clearTimeout(savedBadgeTimer);
+  savedBadgeTimer = setTimeout(() => {
+    savedBadge.classList.remove('show');
+  }, 2000);
+}
 
-function checkStandaloneMode() {
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                       window.navigator.standalone === true ||
-                       document.referrer.includes('android-app://');
-  
-  if (isStandalone) {
-    installBtn.textContent = '✓ Pintasan Aktif';
-    installBtn.classList.add('installed');
-    installBtn.title = 'Aplikasi dibuka dari Pintasan Layar Utama';
+// ============================================================================
+// 2. PWA INSTALLATION & STANDALONE DETECTION
+// ============================================================================
+function isRunningStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches ||
+         window.matchMedia('(display-mode: fullscreen)').matches ||
+         window.navigator.standalone === true ||
+         document.referrer.includes('android-app://');
+}
+
+function updateInstallUI() {
+  const standalone = isRunningStandalone();
+  if (standalone) {
+    if (installBtn) installBtn.classList.add('installed');
+    if (trayInstallState) trayInstallState.textContent = 'TERPASANG';
+  } else {
+    if (installBtn) installBtn.classList.remove('installed');
+    if ( deferredInstallPrompt && installNativeBox ) {
+      installNativeBox.style.display = 'block';
+    }
   }
 }
 
-// Listen for native install prompt
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredInstallPrompt = e;
-  installBtn.style.display = 'inline-flex';
-  installBtn.textContent = '📲 Pasang Pintasan';
-  console.log('beforeinstallprompt event captured');
+  updateInstallUI();
+  if (installNativeBox) installNativeBox.style.display = 'block';
+  console.log('PWA beforeinstallprompt ready');
 });
 
-// Detect when installed successfully
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
-  installBtn.textContent = '✓ Terpasang';
-  installBtn.classList.add('installed');
-  showToast('🎉 Aplikasi berhasil dipasang di layar utama!');
+  updateInstallUI();
   if (installSheetBackdrop) installSheetBackdrop.classList.remove('active');
+  showToast('🎉 Kamera Foto-Live berhasil diinstal di HP Anda!');
 });
 
-// Click handler for Install button
-installBtn.addEventListener('click', () => {
-  handleInstallAction();
-});
-
-btnTriggerInstall.addEventListener('click', async () => {
-  if (deferredInstallPrompt) {
-    installSheetBackdrop.classList.remove('active');
-    deferredInstallPrompt.prompt();
-    const { outcome } = await deferredInstallPrompt.userChoice;
-    if (outcome === 'accepted') {
-      showToast('Pintasan sedang ditambahkan ke layar utama...');
-      installBtn.style.display = 'none';
-    }
-    deferredInstallPrompt = null;
-  } else {
-    // If not supported natively or on iOS
-    showToast('Ikuti panduan di atas untuk menambahkan pintasan');
-  }
-});
-
-btnCloseSheet.addEventListener('click', () => {
-  installSheetBackdrop.classList.remove('active');
-});
-
-installSheetBackdrop.addEventListener('click', (e) => {
-  if (e.target === installSheetBackdrop) {
-    installSheetBackdrop.classList.remove('active');
-  }
-});
-
-function handleInstallAction() {
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  if (isStandalone) {
-    showToast('Aplikasi sudah berjalan dari pintasan layar utama!');
+async function triggerPWAInstall() {
+  if (isRunningStandalone()) {
+    showToast('✓ Aplikasi sudah terinstal & berjalan layar penuh');
     return;
   }
 
   if (deferredInstallPrompt) {
-    deferredInstallPrompt.prompt();
-    deferredInstallPrompt.userChoice.then((choiceResult) => {
-      if (choiceResult.outcome === 'accepted') {
-        showToast('Pintasan berhasil dipasang!');
+    try {
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') {
+        showToast('📲 Menginstal Kamera Foto-Live ke layar utama...');
+        if (installSheetBackdrop) installSheetBackdrop.classList.remove('active');
       }
       deferredInstallPrompt = null;
-    });
-  } else {
-    // Show instruction sheet
+      updateInstallUI();
+      return;
+    } catch (err) {
+      console.warn('Install prompt error:', err);
+    }
+  }
+
+  // Show smart install guide bottom sheet
+  if (installNativeBox) {
+    installNativeBox.style.display = deferredInstallPrompt ? 'block' : 'none';
+  }
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if (isIOS && installStatusMsg) {
+    installStatusMsg.textContent = 'Di iPhone/iPad: Ketuk ikon Bagikan (Share) di bawah Safari, lalu pilih "Tambah ke Layar Utama" (Add to Home Screen).';
+  }
+  if (installSheetBackdrop) {
     installSheetBackdrop.classList.add('active');
   }
 }
 
-// Register Service Worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then((reg) => console.log('Service Worker registered with scope:', reg.scope))
-      .catch((err) => console.warn('Service Worker registration failed:', err));
+if (installBtn) installBtn.addEventListener('click', triggerPWAInstall);
+if (trayInstallBtn) {
+  trayInstallBtn.addEventListener('click', () => {
+    settingsTray.classList.remove('active');
+    triggerPWAInstall();
+  });
+}
+if (btnTriggerInstall) btnTriggerInstall.addEventListener('click', triggerPWAInstall);
+if (btnCloseSheet) {
+  btnCloseSheet.addEventListener('click', () => {
+    installSheetBackdrop.classList.remove('active');
+  });
+}
+if (installSheetBackdrop) {
+  installSheetBackdrop.addEventListener('click', (e) => {
+    if (e.target === installSheetBackdrop) installSheetBackdrop.classList.remove('active');
   });
 }
 
-// ==========================================
-// 2. CAMERA ENGINE & STREAMING
-// ==========================================
+// Register & auto-update Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      reg.update();
+    }).catch((err) => console.warn('SW error:', err));
+  });
+}
 
+// ============================================================================
+// 3. REAL HARDWARE CAMERA STREAMING & FALLBACK
+// ============================================================================
 async function startCamera() {
-  if (isDemoMode) {
-    activateDemoScene();
-    return;
-  }
+  stopSimulationCanvas();
+  if (permOverlay) permOverlay.style.display = 'none';
 
   if (currentStream) {
     currentStream.getTracks().forEach(track => track.stop());
     currentStream = null;
   }
 
-  fallbackImg.classList.remove('active');
-  videoEl.style.display = 'block';
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showCameraPermissionError('Browser ini memerlukan koneksi HTTPS atau localhost untuk mengakses kamera fisik.');
+    return;
+  }
 
-  try {
-    const constraints = {
+  // Progressive camera constraints so portrait / front cameras NEVER fail with OverconstrainedError
+  const constraintCandidates = [
+    {
       video: {
-        facingMode: currentFacingMode,
-        width: { ideal: 1920, min: 1280 },
-        height: { ideal: 1080, min: 720 },
+        facingMode: { ideal: currentFacingMode },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
         frameRate: { ideal: 30 }
       },
-      audio: isLiveActive // Request mic if Live mode is enabled
-    };
+      audio: false
+    },
+    {
+      video: { facingMode: currentFacingMode },
+      audio: false
+    },
+    {
+      video: true,
+      audio: false
+    }
+  ];
 
-    let stream;
+  let stream = null;
+  let lastError = null;
+
+  for (const constraints of constraintCandidates) {
     try {
       stream = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (audioErr) {
-      // If mic was rejected or unavailable, fallback to video-only
-      console.warn('Audio not available, trying video only:', audioErr);
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: constraints.video,
-        audio: false
-      });
+      if (stream) break;
+    } catch (err) {
+      lastError = err;
     }
-
-    currentStream = stream;
-    videoEl.srcObject = stream;
-    videoEl.classList.toggle('mirror', currentFacingMode === 'user');
-
-    await videoEl.play();
-  } catch (err) {
-    console.warn('Camera could not be started, activating Anti-Gravity Simulation:', err);
-    activateDemoScene();
-    showToast('Mode Anti-Gravitasi aktif (kamera tidak dapat diakses)');
   }
-}
 
-function activateDemoScene() {
-  if (currentStream) {
-    currentStream.getTracks().forEach(track => track.stop());
-    currentStream = null;
-  }
-  videoEl.style.display = 'none';
-  fallbackImg.classList.add('active');
-  isDemoMode = true;
-  demoToggle.classList.add('active');
-}
-
-function deactivateDemoScene() {
-  isDemoMode = false;
-  demoToggle.classList.remove('active');
-  fallbackImg.classList.remove('active');
-  startCamera();
-}
-
-// Flip Camera
-flipBtn.addEventListener('click', () => {
-  if (isDemoMode) {
-    showToast('Kembali ke kamera fisik');
-    deactivateDemoScene();
+  if (!stream) {
+    console.warn('Camera access failed:', lastError);
+    showCameraPermissionError('Pastikan izin Kamera sudah diizinkan di pengaturan browser Anda.');
     return;
   }
-  currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-  startCamera();
-  showToast(currentFacingMode === 'user' ? 'Kamera Depan' : 'Kamera Belakang', 1500);
-});
 
-// Live Photo Mode Toggle
-liveToggle.addEventListener('click', () => {
-  isLiveActive = !isLiveActive;
-  liveToggle.classList.toggle('off', !isLiveActive);
-  liveToggle.classList.toggle('active', isLiveActive);
-  shutterBtn.classList.toggle('live-active', isLiveActive);
-  
-  if (isLiveActive) {
-    playLiveChime();
-    showToast('Mode LIVE aktif ◎');
-  } else {
-    showToast('Mode Foto Standar');
+  currentStream = stream;
+  isSimulationMode = false;
+  simCanvas.style.display = 'none';
+  videoEl.style.display = 'block';
+  videoEl.srcObject = stream;
+
+  applyVideoTransformAndFilter();
+
+  try {
+    await videoEl.play();
+  } catch (e) {
+    console.warn('Video play warning:', e);
   }
 
-  // Restart camera to re-bind audio stream if needed
-  if (!isDemoMode) startCamera();
+  // Apply torch if flashMode is 'torch'
+  if (flashMode === 'torch') {
+    setHardwareTorch(true);
+  }
+}
+
+function showCameraPermissionError(msg) {
+  if (permDesc && msg) permDesc.textContent = msg;
+  if (permOverlay) permOverlay.style.display = 'flex';
+}
+
+if (btnRetryCamera) {
+  btnRetryCamera.addEventListener('click', () => {
+    startCamera();
+  });
+}
+
+if (btnSimCamera) {
+  btnSimCamera.addEventListener('click', () => {
+    startSimulationCamera();
+  });
+}
+
+// Live Interactive Simulation Camera (only when testing on PC without webcam)
+function startSimulationCamera() {
+  if (permOverlay) permOverlay.style.display = 'none';
+  isSimulationMode = true;
+  videoEl.style.display = 'none';
+  simCanvas.style.display = 'block';
+  simCanvas.width = 1080;
+  simCanvas.height = 1920;
+  const ctx = simCanvas.getContext('2d');
+
+  let start = performance.now();
+  function renderSim(now) {
+    if (!isSimulationMode) return;
+    const t = (now - start) / 1000;
+
+    // Realistic dynamic scene with moving bokeh lights & horizon
+    const grad = ctx.createLinearGradient(0, 0, 0, simCanvas.height);
+    grad.addColorStop(0, '#0f172a');
+    grad.addColorStop(0.55, '#1e293b');
+    grad.addColorStop(1, '#090d16');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, simCanvas.width, simCanvas.height);
+
+    // Animated warm street/studio bokeh orbs
+    for (let i = 0; i < 14; i++) {
+      const x = (simCanvas.width * 0.5) + Math.sin(t * 0.7 + i * 1.4) * 380;
+      const y = (simCanvas.height * 0.45) + Math.cos(t * 0.5 + i * 1.1) * 520;
+      const r = 45 + (i % 4) * 35;
+      const orbGrad = ctx.createRadialGradient(x, y, 5, x, y, r);
+      const colors = ['rgba(255, 200, 80, 0.35)', 'rgba(56, 189, 248, 0.3)', 'rgba(244, 114, 182, 0.28)'];
+      orbGrad.addColorStop(0, colors[i % colors.length]);
+      orbGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = orbGrad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Center subject card with live clock so motion is clearly visible
+    ctx.save();
+    ctx.translate(simCanvas.width / 2, simCanvas.height / 2 + Math.sin(t * 2.2) * 18);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.strokeStyle = 'rgba(255, 208, 0, 0.6)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(-260, -160, 520, 320, 28);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffd000';
+    ctx.font = 'bold 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('● LIVE CAMERA SENSOR', 0, -55);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 64px monospace';
+    const timeStr = new Date().toLocaleTimeString('id-ID');
+    ctx.fillText(timeStr, 0, 30);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = '26px sans-serif';
+    ctx.fillText(`${aspectRatio.toUpperCase()} • ${currentZoom}x • EV ${currentExposure >= 0 ? '+' : ''}${currentExposure}`, 0, 105);
+    ctx.restore();
+
+    simAnimFrame = requestAnimationFrame(renderSim);
+  }
+  simAnimFrame = requestAnimationFrame(renderSim);
+  applyVideoTransformAndFilter();
+}
+
+function stopSimulationCanvas() {
+  isSimulationMode = false;
+  if (simAnimFrame) {
+    cancelAnimationFrame(simAnimFrame);
+    simAnimFrame = null;
+  }
+}
+
+// ============================================================================
+// 4. VIEWFINDER TRANSFORMS, ZOOM, FOCUS, EXPOSURE & FILTERS
+// ============================================================================
+function applyVideoTransformAndFilter() {
+  const targetEl = isSimulationMode ? simCanvas : videoEl;
+  if (!targetEl) return;
+
+  const shouldMirror = !isSimulationMode && currentFacingMode === 'user' && isMirrorSelfie;
+  const mirrorScale = shouldMirror ? -1 : 1;
+
+  // Check if hardware zoom is handling zoom or if we use digital scale
+  const scale = currentZoom > 1 ? currentZoom : 1;
+  targetEl.style.transform = `scale(${mirrorScale * scale}, ${scale})`;
+
+  // Combine selected color filter + exposure compensation brightness
+  const baseFilter = FILTER_MAP[activeFilter] === 'none' ? '' : FILTER_MAP[activeFilter];
+  const evBrightness = currentExposure !== 0 ? `brightness(${1 + currentExposure * 0.18})` : '';
+  const combined = `${baseFilter} ${evBrightness}`.trim() || 'none';
+  targetEl.style.filter = combined;
+}
+
+// Hardware Torch Helper
+async function setHardwareTorch(enable) {
+  if (!currentStream) return false;
+  const track = currentStream.getVideoTracks()[0];
+  if (!track || !track.getCapabilities) return false;
+  try {
+    const caps = track.getCapabilities();
+    if (caps.torch) {
+      await track.applyConstraints({ advanced: [{ torch: enable }] });
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+// Tap-to-Focus & Exposure Reticle on Viewfinder
+let focusHideTimer = null;
+viewfinderFrame.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.exposure-control') || e.target.closest('.camera-permission-overlay')) {
+    return;
+  }
+
+  // Close settings tray or filter strip if open
+  settingsTray.classList.remove('active');
+
+  const rect = viewfinderFrame.getBoundingClientRect();
+  const x = Math.max(48, Math.min(rect.width - 80, e.clientX - rect.left));
+  const y = Math.max(60, Math.min(rect.height - 60, e.clientY - rect.top));
+
+  focusReticle.style.left = `${x}px`;
+  focusReticle.style.top = `${y}px`;
+  focusReticle.classList.remove('active');
+  void focusReticle.offsetWidth; // Reflow to restart pop animation
+  focusReticle.classList.add('active');
+
+  playFocusSound();
+
+  // Attempt hardware single-shot focus if supported
+  if (currentStream) {
+    const track = currentStream.getVideoTracks()[0];
+    if (track && track.getCapabilities) {
+      try {
+        const caps = track.getCapabilities();
+        if (caps.focusMode && caps.focusMode.includes('single-shot')) {
+          track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] }).catch(() => {});
+        }
+      } catch (err) {}
+    }
+  }
+
+  resetFocusHideTimer();
 });
+
+function resetFocusHideTimer() {
+  clearTimeout(focusHideTimer);
+  focusHideTimer = setTimeout(() => {
+    focusReticle.classList.remove('active');
+  }, 3500);
+}
+
+if (exposureSlider) {
+  exposureSlider.addEventListener('input', (e) => {
+    currentExposure = parseFloat(e.target.value) || 0;
+    applyVideoTransformAndFilter();
+    resetFocusHideTimer();
+
+    // Also apply hardware exposureCompensation if supported
+    if (currentStream) {
+      const track = currentStream.getVideoTracks()[0];
+      if (track && track.getCapabilities) {
+        try {
+          const caps = track.getCapabilities();
+          if (caps.exposureCompensation) {
+            const min = caps.exposureCompensation.min || -2;
+            const max = caps.exposureCompensation.max || 2;
+            const clamped = Math.max(min, Math.min(max, currentExposure));
+            track.applyConstraints({ advanced: [{ exposureCompensation: clamped }] }).catch(() => {});
+          }
+        } catch (err) {}
+      }
+    }
+  });
+}
+
+// Optical / Digital Zoom Controls
+const zoomBtns = document.querySelectorAll('.zoom-btn');
+zoomBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const z = parseFloat(btn.dataset.zoom) || 1;
+    setCameraZoom(z);
+  });
+});
+
+async function setCameraZoom(zoomLevel) {
+  currentZoom = Math.max(0.5, Math.min(5, zoomLevel));
+  triggerHaptic(12);
+
+  zoomBtns.forEach(b => {
+    const bz = parseFloat(b.dataset.zoom);
+    b.classList.toggle('active', Math.abs(bz - currentZoom) < 0.15);
+    if (Math.abs(bz - currentZoom) < 0.15) {
+      b.innerHTML = `${bz}<span>x</span>`;
+    } else {
+      b.textContent = bz;
+    }
+  });
+
+  // Try hardware zoom first, always keep digital transform fallback
+  if (currentStream) {
+    const track = currentStream.getVideoTracks()[0];
+    if (track && track.getCapabilities) {
+      try {
+        const caps = track.getCapabilities();
+        if (caps.zoom) {
+          const hwZoom = Math.max(caps.zoom.min, Math.min(caps.zoom.max, currentZoom));
+          await track.applyConstraints({ advanced: [{ zoom: hwZoom }] });
+        }
+      } catch (e) {}
+    }
+  }
+
+  applyVideoTransformAndFilter();
+  showToast(`Zoom ${currentZoom.toFixed(1).replace('.0', '')}x`, 1000);
+}
+
+// Pinch-to-Zoom on Viewfinder
+let initialPinchDistance = null;
+let initialZoom = 1;
+
+viewfinderFrame.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    initialPinchDistance = Math.hypot(dx, dy);
+    initialZoom = currentZoom;
+  }
+}, { passive: true });
+
+viewfinderFrame.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2 && initialPinchDistance) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.hypot(dx, dy);
+    const ratio = dist / initialPinchDistance;
+    const nextZoom = Math.round(Math.max(1, Math.min(4, initialZoom * ratio)) * 10) / 10;
+    if (Math.abs(nextZoom - currentZoom) >= 0.1) {
+      setCameraZoom(nextZoom);
+    }
+  }
+}, { passive: true });
+
+viewfinderFrame.addEventListener('touchend', () => {
+  initialPinchDistance = null;
+});
+
+// ============================================================================
+// 5. TOP BAR & QUICK SETTINGS CONTROLS
+// ============================================================================
 
 // Flash Toggle
 flashToggle.addEventListener('click', () => {
+  triggerHaptic(15);
   if (flashMode === 'off') {
-    flashMode = 'on';
-    flashToggle.classList.add('active');
-    flashToggle.innerHTML = `⚡ <span style="font-size:10px;">ON</span>`;
-    showToast('Flash Aktif');
-  } else if (flashMode === 'on') {
     flashMode = 'auto';
+    flashBadge.textContent = 'AUTO';
     flashToggle.classList.add('active');
-    flashToggle.innerHTML = `⚡ <span style="font-size:10px;">AUTO</span>`;
-    showToast('Flash Auto');
+    setHardwareTorch(false);
+    showToast('⚡ Flash Otomatis');
+  } else if (flashMode === 'auto') {
+    flashMode = 'on';
+    flashBadge.textContent = 'ON';
+    flashToggle.classList.add('active');
+    setHardwareTorch(false);
+    showToast('⚡ Flash Selalu Aktif');
+  } else if (flashMode === 'on') {
+    flashMode = 'torch';
+    flashBadge.textContent = 'SENTER';
+    flashToggle.classList.add('active');
+    setHardwareTorch(true);
+    showToast('🔦 Senter Kamera Aktif');
   } else {
     flashMode = 'off';
+    flashBadge.textContent = 'OFF';
     flashToggle.classList.remove('active');
-    flashToggle.innerHTML = `⚡`;
+    setHardwareTorch(false);
     showToast('Flash Mati');
   }
 });
 
-// Grid Toggle
-gridToggle.addEventListener('click', () => {
-  gridActive = !gridActive;
-  gridOverlay.classList.toggle('active', gridActive);
-  gridToggle.classList.toggle('active', gridActive);
-  showToast(gridActive ? 'Grid 3x3 Aktif' : 'Grid Mati', 1200);
+// Live Photo Toggle
+liveToggle.addEventListener('click', () => {
+  triggerHaptic(18);
+  isLiveActive = !isLiveActive;
+  updateLiveUI();
+  showToast(isLiveActive ? '◎ Live Photo Aktif (Rekam Gerak)' : 'Live Photo Nonaktif (Foto Standar)');
 });
+
+function updateLiveUI() {
+  liveToggle.classList.toggle('active', isLiveActive);
+  liveToggle.classList.toggle('off', !isLiveActive);
+  liveStatusText.textContent = isLiveActive ? 'LIVE' : 'OFF';
+  if (cameraMode !== 'video') {
+    shutterBtn.classList.toggle('live-active', isLiveActive);
+  }
+}
 
 // Timer Toggle
 timerToggle.addEventListener('click', () => {
+  triggerHaptic(15);
   if (timerSeconds === 0) {
     timerSeconds = 3;
+    timerBadge.textContent = '3s';
     timerToggle.classList.add('active');
-    timerToggle.innerHTML = `⏱️ 3s`;
-    showToast('Timer 3 Detik');
+    showToast('⏱️ Timer 3 Detik');
   } else if (timerSeconds === 3) {
     timerSeconds = 10;
+    timerBadge.textContent = '10s';
     timerToggle.classList.add('active');
-    timerToggle.innerHTML = `⏱️ 10s`;
-    showToast('Timer 10 Detik');
+    showToast('⏱️ Timer 10 Detik');
   } else {
     timerSeconds = 0;
+    timerBadge.textContent = '';
     timerToggle.classList.remove('active');
-    timerToggle.innerHTML = `⏱️`;
     showToast('Timer Mati');
   }
 });
 
-// Auto-Save Toggle
-function updateAutoSaveUI() {
-  if (!autosaveToggle) return;
-  if (isAutoSaveActive) {
-    autosaveToggle.classList.add('active');
-    autosaveToggle.innerHTML = `💾 <span style="font-size:9px; font-weight:700;">ON</span>`;
-    autosaveToggle.title = 'Auto-Save ke Galeri HP: AKTIF';
-  } else {
-    autosaveToggle.classList.remove('active');
-    autosaveToggle.innerHTML = `💾`;
-    autosaveToggle.title = 'Auto-Save ke Galeri HP: NONAKTIF';
+// Aspect Ratio Toggle
+const RATIOS = ['full', '4:3', '16:9', '1:1'];
+ratioToggle.addEventListener('click', () => {
+  triggerHaptic(15);
+  const idx = (RATIOS.indexOf(aspectRatio) + 1) % RATIOS.length;
+  aspectRatio = RATIOS[idx];
+  ratioText.textContent = aspectRatio.toUpperCase();
+
+  viewfinderFrame.className = 'viewfinder-frame';
+  if (aspectRatio === 'full') viewfinderFrame.classList.add('ratio-full');
+  else if (aspectRatio === '4:3') viewfinderFrame.classList.add('ratio-4-3');
+  else if (aspectRatio === '16:9') viewfinderFrame.classList.add('ratio-16-9');
+  else if (aspectRatio === '1:1') viewfinderFrame.classList.add('ratio-1-1');
+
+  showToast(`Rasio Layar ${aspectRatio.toUpperCase()}`, 1200);
+});
+
+// Filter Toggle & Selection
+filterToggle.addEventListener('click', () => {
+  triggerHaptic(15);
+  filterStrip.classList.toggle('active');
+  filterToggle.classList.toggle('active', filterStrip.classList.contains('active') || activeFilter !== 'none');
+});
+
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    triggerHaptic(12);
+    activeFilter = chip.dataset.filter || 'none';
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c === chip));
+    filterToggle.classList.toggle('active', activeFilter !== 'none');
+    applyVideoTransformAndFilter();
+    showToast(`Filter: ${chip.textContent}`, 1200);
+  });
+});
+
+// Settings Tray Toggle
+settingsToggle.addEventListener('click', () => {
+  triggerHaptic(15);
+  settingsTray.classList.toggle('active');
+});
+
+if (closeSettingsBtn) {
+  closeSettingsBtn.addEventListener('click', () => {
+    settingsTray.classList.remove('active');
+  });
+}
+
+function syncSettingsTrayUI() {
+  if (autosaveToggle) {
+    autosaveToggle.classList.toggle('active', isAutoSaveActive);
+    autosaveState.textContent = isAutoSaveActive ? 'AKTIF' : 'OFF';
+  }
+  if (autosaveVideoToggle) {
+    autosaveVideoToggle.classList.toggle('active', isAutoSaveVideoClip);
+    autosaveVideoState.textContent = isAutoSaveVideoClip ? 'AKTIF' : 'OFF';
+  }
+  if (gridToggle) {
+    gridToggle.classList.toggle('active', isGridActive);
+    gridState.textContent = isGridActive ? 'AKTIF' : 'OFF';
+    gridOverlay.classList.toggle('active', isGridActive);
+  }
+  if (soundToggle) {
+    soundToggle.classList.toggle('active', isSoundActive);
+    soundState.textContent = isSoundActive ? 'AKTIF' : 'OFF';
+  }
+  if (mirrorToggle) {
+    mirrorToggle.classList.toggle('active', isMirrorSelfie);
+    mirrorState.textContent = isMirrorSelfie ? 'AKTIF' : 'OFF';
   }
 }
 
@@ -411,230 +857,505 @@ if (autosaveToggle) {
   autosaveToggle.addEventListener('click', () => {
     isAutoSaveActive = !isAutoSaveActive;
     localStorage.setItem('fotolive_autosave', isAutoSaveActive ? 'true' : 'false');
-    updateAutoSaveUI();
-    showToast(isAutoSaveActive ? 'Auto-Save ke Galeri HP: AKTIF 💾' : 'Auto-Save ke Galeri HP: NONAKTIF');
+    syncSettingsTrayUI();
+    showToast(isAutoSaveActive ? '💾 Simpan Otomatis ke Galeri HP: AKTIF' : 'Simpan Otomatis ke Galeri HP: NONAKTIF');
   });
 }
 
-// Demo Zero-G Toggle
-demoToggle.addEventListener('click', () => {
-  if (isDemoMode) {
-    deactivateDemoScene();
-    showToast('Kamera Normal');
-  } else {
-    activateDemoScene();
-    showToast('Mode Simulasi Zero-Gravity Aktif ✨');
-  }
+if (autosaveVideoToggle) {
+  autosaveVideoToggle.addEventListener('click', () => {
+    isAutoSaveVideoClip = !isAutoSaveVideoClip;
+    localStorage.setItem('fotolive_autosave_clip', isAutoSaveVideoClip ? 'true' : 'false');
+    syncSettingsTrayUI();
+    showToast(isAutoSaveVideoClip ? '🎬 Unduh Otomatis Klip Live MP4: AKTIF' : 'Unduh Otomatis Klip Live: OFF (Hanya Foto JPG)');
+  });
+}
+
+if (gridToggle) {
+  gridToggle.addEventListener('click', () => {
+    isGridActive = !isGridActive;
+    localStorage.setItem('fotolive_grid', isGridActive ? 'true' : 'false');
+    syncSettingsTrayUI();
+  });
+}
+
+if (soundToggle) {
+  soundToggle.addEventListener('click', () => {
+    isSoundActive = !isSoundActive;
+    localStorage.setItem('fotolive_sound', isSoundActive ? 'true' : 'false');
+    syncSettingsTrayUI();
+    showToast(isSoundActive ? '🔊 Suara Rana Kamera Aktif' : '🔇 Suara Kamera Dibisukan');
+  });
+}
+
+if (mirrorToggle) {
+  mirrorToggle.addEventListener('click', () => {
+    isMirrorSelfie = !isMirrorSelfie;
+    localStorage.setItem('fotolive_mirror', isMirrorSelfie ? 'true' : 'false');
+    syncSettingsTrayUI();
+    applyVideoTransformAndFilter();
+  });
+}
+
+// ============================================================================
+// 6. CAMERA MODES (POTRET | FOTO | LIVE FOTO | VIDEO) & FLIP CAMERA
+// ============================================================================
+document.querySelectorAll('.mode-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (isRecordingVideo) return;
+    setCameraMode(btn.dataset.mode);
+  });
 });
 
-// ==========================================
-// 3. CAPTURE LOGIC (LIVE PHOTO & MOTION CLIP)
-// ==========================================
+function setCameraMode(mode) {
+  cameraMode = mode;
+  triggerHaptic(15);
 
+  document.querySelectorAll('.mode-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+
+  portraitVignette.classList.toggle('active', mode === 'portrait');
+
+  if (mode === 'live') {
+    isLiveActive = true;
+    liveToggle.style.display = 'inline-flex';
+    shutterBtn.classList.remove('video-mode');
+    updateLiveUI();
+  } else if (mode === 'photo' || mode === 'portrait') {
+    isLiveActive = false;
+    liveToggle.style.display = 'inline-flex';
+    shutterBtn.classList.remove('video-mode');
+    updateLiveUI();
+  } else if (mode === 'video') {
+    liveToggle.style.display = 'none';
+    shutterBtn.classList.remove('live-active');
+    shutterBtn.classList.add('video-mode');
+  }
+}
+
+// Flip Front / Rear Camera
+flipBtn.addEventListener('click', () => {
+  if (isRecordingVideo) return;
+  triggerHaptic(20);
+  flipBtn.classList.add('flipping');
+  setTimeout(() => flipBtn.classList.remove('flipping'), 360);
+
+  currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+  startCamera();
+  showToast(currentFacingMode === 'user' ? '🤳 Kamera Depan' : '📷 Kamera Belakang', 1400);
+});
+
+// ============================================================================
+// 7. CAPTURE ENGINE (STILL PHOTO, LIVE PHOTO, & FULL HD VIDEO)
+// ============================================================================
 shutterBtn.addEventListener('click', () => {
+  if (cameraMode === 'video') {
+    toggleFullVideoRecording();
+    return;
+  }
+
   if (isCapturing) return;
 
   if (timerSeconds > 0) {
-    runCountdown(timerSeconds, () => executeCapture());
+    runCountdown(timerSeconds, () => executePhotoCapture());
   } else {
-    executeCapture();
+    executePhotoCapture();
+  }
+});
+
+// Support Hardware Volume / Keyboard Spacebar Shutter
+window.addEventListener('keydown', (e) => {
+  if (modal.classList.contains('active')) return;
+  if (e.code === 'Space' || e.code === 'Enter' || e.key === 'AudioVolumeUp' || e.key === 'AudioVolumeDown') {
+    e.preventDefault();
+    shutterBtn.click();
   }
 });
 
 function runCountdown(seconds, callback) {
+  isCapturing = true;
   let count = seconds;
   countdownOverlay.classList.add('active');
   countdownNumber.textContent = count;
-  
+  playFocusSound();
+
   const interval = setInterval(() => {
     count--;
     if (count > 0) {
       countdownNumber.textContent = count;
+      playFocusSound();
     } else {
       clearInterval(interval);
       countdownOverlay.classList.remove('active');
+      isCapturing = false;
       callback();
     }
   }, 1000);
 }
 
-async function executeCapture() {
+function getCameraDCIMName(prefix = 'IMG', ext = 'jpg') {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const datePart = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const timePart = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  return `${prefix}_${datePart}_${timePart}.${ext}`;
+}
+
+async function executePhotoCapture() {
   isCapturing = true;
   shutterBtn.classList.add('pressing');
   playShutterSound();
 
-  // Screen Flash
-  if (flashMode === 'on' || (flashMode === 'auto' && Math.random() > 0.4)) {
-    flashScreen.classList.add('trigger');
-    setTimeout(() => flashScreen.classList.remove('trigger'), 120);
-  }
-
-  // --- Step 1: Capture High-Res Still Frame ---
-  let stillBlob = null;
-  const ctx = captureCanvas.getContext('2d');
-
-  if (isDemoMode) {
-    // Capture from Fallback Zero-Gravity image
-    captureCanvas.width = fallbackImg.naturalWidth || 1080;
-    captureCanvas.height = fallbackImg.naturalHeight || 1920;
-    ctx.drawImage(fallbackImg, 0, 0, captureCanvas.width, captureCanvas.height);
-  } else {
-    captureCanvas.width = videoEl.videoWidth || 1920;
-    captureCanvas.height = videoEl.videoHeight || 1080;
-    if (currentFacingMode === 'user') {
-      ctx.translate(captureCanvas.width, 0);
-      ctx.scale(-1, 1);
+  // Trigger Flash (Hardware Torch + Screen Retina Flash)
+  const shouldFlash = flashMode === 'on' || (flashMode === 'auto' && currentFacingMode === 'user');
+  if (shouldFlash) {
+    if (currentFacingMode === 'environment') {
+      await setHardwareTorch(true);
     }
-    ctx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+    flashScreen.classList.add('trigger');
+    setTimeout(() => {
+      flashScreen.classList.remove('trigger');
+      if (flashMode !== 'torch') setHardwareTorch(false);
+    }, 160);
   }
 
-  stillBlob = await new Promise((resolve) => captureCanvas.toBlob(resolve, 'image/jpeg', 0.95));
+  // --- 1. Capture High-Resolution Still Photo Immediately ---
+  const stillBlob = await captureHighResStillBlob();
+  const itemId = Date.now();
+  const filename = getCameraDCIMName('IMG', 'jpg');
+  const photoUrl = URL.createObjectURL(stillBlob);
 
-  // --- Step 2: Record Live Motion Clip (if LIVE is active) ---
+  // Create Gallery Item immediately
+  const newItem = {
+    id: itemId,
+    filename: filename,
+    timestamp: new Date().toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }),
+    photoBlob: stillBlob,
+    photoUrl: photoUrl,
+    videoBlob: null,
+    videoUrl: null,
+    videoExt: 'mp4',
+    isLive: isLiveActive,
+    isVideoOnly: false
+  };
+
+  galleryItems.unshift(newItem);
+  activeItemIndex = 0;
+
+  // --- 2. IMMEDIATE AUTO-SAVE TO DEVICE GALLERY (Synchronous with user tap!) ---
+  if (isAutoSaveActive) {
+    triggerDeviceDownload(photoUrl, filename);
+    showSavedBadge(isLiveActive ? '✓ Live Foto Tersimpan ke Galeri' : '✓ Foto Tersimpan ke Galeri');
+  }
+
+  // Save initial photo to IndexedDB & update thumbnail right away
+  savePhotoToDB(newItem);
+  updateBottomThumbnailUI();
+
+  setTimeout(() => shutterBtn.classList.remove('pressing'), 150);
+
+  // --- 3. If Live Photo mode is active, record 1.5s Live Motion Clip ---
   if (isLiveActive) {
+    recordingHudText.textContent = 'LIVE';
     recordingHud.classList.add('active');
-    shutterBtn.classList.add('recording');
-    playLiveChime();
 
-    let motionBlob = null;
     try {
-      motionBlob = await recordMotionClip();
-    } catch (recErr) {
-      console.warn('Motion recording error:', recErr);
+      const motionResult = await recordMotionClip(1500);
+      if (motionResult && motionResult.blob && motionResult.blob.size > 0) {
+        newItem.videoBlob = motionResult.blob;
+        newItem.videoUrl = URL.createObjectURL(motionResult.blob);
+        newItem.videoExt = motionResult.ext;
+
+        // Update IndexedDB with the attached Live Motion video blob
+        savePhotoToDB(newItem);
+
+        // If user also turned on Auto-Download Live Video Clip in Settings
+        if (isAutoSaveActive && isAutoSaveVideoClip) {
+          const vidName = getCameraDCIMName('LIVE', motionResult.ext);
+          triggerDeviceDownload(newItem.videoUrl, vidName);
+        }
+      }
+    } catch (err) {
+      console.warn('Live motion recording error:', err);
     }
 
     recordingHud.classList.remove('active');
-    shutterBtn.classList.remove('recording');
-
-    saveCaptureToGallery(stillBlob, motionBlob, true);
-  } else {
-    saveCaptureToGallery(stillBlob, null, false);
   }
 
-  shutterBtn.classList.remove('pressing');
   isCapturing = false;
 }
 
-function recordMotionClip() {
+// Capture cropped, zoomed, and filtered high-res frame from camera or simulation
+function captureHighResStillBlob() {
+  return new Promise((resolve) => {
+    const sourceEl = isSimulationMode ? simCanvas : videoEl;
+    const srcW = isSimulationMode ? simCanvas.width : (videoEl.videoWidth || 1920);
+    const srcH = isSimulationMode ? simCanvas.height : (videoEl.videoHeight || 1080);
+
+    // Calculate crop based on selected aspectRatio & digital zoom
+    let targetRatio = srcW / srcH;
+    if (aspectRatio === '4:3') targetRatio = srcH > srcW ? 3 / 4 : 4 / 3;
+    else if (aspectRatio === '16:9') targetRatio = srcH > srcW ? 9 / 16 : 16 / 9;
+    else if (aspectRatio === '1:1') targetRatio = 1;
+
+    let cropW = srcW;
+    let cropH = srcH;
+    if (srcW / srcH > targetRatio) {
+      cropW = Math.round(srcH * targetRatio);
+    } else {
+      cropH = Math.round(srcW / targetRatio);
+    }
+
+    // Apply digital zoom crop
+    const zoomFactor = Math.max(1, currentZoom);
+    const zoomedW = Math.round(cropW / zoomFactor);
+    const zoomedH = Math.round(cropH / zoomFactor);
+    const sx = Math.round((srcW - zoomedW) / 2);
+    const sy = Math.round((srcH - zoomedH) / 2);
+
+    captureCanvas.width = cropW;
+    captureCanvas.height = cropH;
+    const ctx = captureCanvas.getContext('2d');
+
+    ctx.save();
+    // Apply active color filter + exposure brightness into captured image
+    const baseFilter = FILTER_MAP[activeFilter] === 'none' ? '' : FILTER_MAP[activeFilter];
+    const evBrightness = currentExposure !== 0 ? `brightness(${1 + currentExposure * 0.18})` : '';
+    const combinedFilter = `${baseFilter} ${evBrightness}`.trim();
+    if (combinedFilter) {
+      ctx.filter = combinedFilter;
+    }
+
+    // Mirror selfie if front camera & mirror setting is ON
+    if (!isSimulationMode && currentFacingMode === 'user' && isMirrorSelfie) {
+      ctx.translate(cropW, 0);
+      ctx.scale(-1, 1);
+    }
+
+    ctx.drawImage(sourceEl, sx, sy, zoomedW, zoomedH, 0, 0, cropW, cropH);
+    ctx.restore();
+
+    // Portrait mode subtle vignette baked into photo
+    if (cameraMode === 'portrait') {
+      const grad = ctx.createRadialGradient(
+        cropW / 2, cropH / 2, Math.min(cropW, cropH) * 0.3,
+        cropW / 2, cropH / 2, Math.max(cropW, cropH) * 0.7
+      );
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.45)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, cropW, cropH);
+    }
+
+    captureCanvas.toBlob((blob) => {
+      resolve(blob);
+    }, 'image/jpeg', 0.95);
+  });
+}
+
+// Preferred MP4 / WebM MIME Picker for Mobile Gallery Compatibility
+function getSupportedVideoMime() {
+  const candidates = [
+    { mime: 'video/mp4;codecs=avc1,mp4a.40.2', ext: 'mp4' },
+    { mime: 'video/mp4;codecs=avc1', ext: 'mp4' },
+    { mime: 'video/mp4', ext: 'mp4' },
+    { mime: 'video/webm;codecs=vp9,opus', ext: 'webm' },
+    { mime: 'video/webm;codecs=vp8,opus', ext: 'webm' },
+    { mime: 'video/webm', ext: 'webm' }
+  ];
+
+  for (const c of candidates) {
+    try {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(c.mime)) {
+        return c;
+      }
+    } catch (e) {}
+  }
+  return { mime: '', ext: 'mp4' };
+}
+
+function recordMotionClip(durationMs = 1500) {
   return new Promise((resolve) => {
     let streamToRecord = null;
-
-    if (isDemoMode) {
-      // In demo mode, capture canvas stream with simulated floating motion
-      const animStream = createZeroGMotionStream();
-      streamToRecord = animStream;
+    if (isSimulationMode) {
+      streamToRecord = simCanvas.captureStream(30);
     } else {
       streamToRecord = currentStream;
     }
 
-    if (!streamToRecord) {
+    if (!streamToRecord || !window.MediaRecorder) {
       resolve(null);
       return;
     }
 
-    let recordedChunks = [];
-    let mediaRecorder;
-
-    const mimeTypes = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm',
-      'video/mp4'
-    ];
-
-    let chosenMime = mimeTypes.find(type => {
-      try {
-        return MediaRecorder.isTypeSupported(type);
-      } catch (e) {
-        return false;
-      }
-    }) || '';
+    const { mime, ext } = getSupportedVideoMime();
+    const chunks = [];
+    let recorder = null;
 
     try {
-      mediaRecorder = chosenMime ? new MediaRecorder(streamToRecord, { mimeType: chosenMime }) : new MediaRecorder(streamToRecord);
+      recorder = mime ? new MediaRecorder(streamToRecord, { mimeType: mime }) : new MediaRecorder(streamToRecord);
     } catch (e) {
-      mediaRecorder = new MediaRecorder(streamToRecord);
+      try {
+        recorder = new MediaRecorder(streamToRecord);
+      } catch (err) {
+        resolve(null);
+        return;
+      }
     }
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
     };
 
-    mediaRecorder.onstop = () => {
-      const type = chosenMime || 'video/webm';
-      const blob = new Blob(recordedChunks, { type });
-      resolve(blob);
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: mime || 'video/mp4' });
+      resolve({ blob, ext });
     };
 
-    mediaRecorder.start();
-
-    // 1.8 seconds motion clip (Standard Apple / Android Live Photo duration)
+    recorder.start();
     setTimeout(() => {
-      if (mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop();
       }
-    }, 1800);
+    }, durationMs);
   });
 }
 
-// Generate animated zero-gravity movement for demo mode
-function createZeroGMotionStream() {
-  const motionCanvas = document.createElement('canvas');
-  motionCanvas.width = 1080;
-  motionCanvas.height = 1920;
-  const mCtx = motionCanvas.getContext('2d');
-  const stream = motionCanvas.captureStream(30);
-
-  let startTime = Date.now();
-  const renderAnim = () => {
-    const elapsed = (Date.now() - startTime) / 1000;
-    mCtx.clearRect(0, 0, motionCanvas.width, motionCanvas.height);
-    
-    // Slight organic floating bobbing effect
-    const floatY = Math.sin(elapsed * 3) * 12;
-    const floatScale = 1 + Math.cos(elapsed * 2) * 0.015;
-
-    mCtx.save();
-    mCtx.translate(motionCanvas.width / 2, motionCanvas.height / 2 + floatY);
-    mCtx.scale(floatScale, floatScale);
-    mCtx.drawImage(fallbackImg, -motionCanvas.width / 2, -motionCanvas.height / 2, motionCanvas.width, motionCanvas.height);
-    mCtx.restore();
-
-    if (elapsed < 2.0) {
-      requestAnimationFrame(renderAnim);
+// ============================================================================
+// 8. FULL VIDEO RECORDING MODE
+// ============================================================================
+async function toggleFullVideoRecording() {
+  if (!isRecordingVideo) {
+    // Start recording full video
+    let streamToRecord = isSimulationMode ? simCanvas.captureStream(30) : currentStream;
+    if (!streamToRecord || !window.MediaRecorder) {
+      showToast('Perekaman video tidak didukung di perangkat ini');
+      return;
     }
-  };
-  requestAnimationFrame(renderAnim);
 
-  return stream;
+    const { mime, ext } = getSupportedVideoMime();
+    videoRecordedChunks = [];
+
+    try {
+      videoMediaRecorder = mime
+        ? new MediaRecorder(streamToRecord, { mimeType: mime })
+        : new MediaRecorder(streamToRecord);
+    } catch (e) {
+      videoMediaRecorder = new MediaRecorder(streamToRecord);
+    }
+
+    videoMediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) videoRecordedChunks.push(e.data);
+    };
+
+    // Capture a thumbnail frame at start of video
+    const videoThumbBlob = await captureHighResStillBlob();
+
+    videoMediaRecorder.onstop = () => {
+      const videoBlob = new Blob(videoRecordedChunks, { type: mime || 'video/mp4' });
+      const videoUrl = URL.createObjectURL(videoBlob);
+      const thumbUrl = URL.createObjectURL(videoThumbBlob);
+      const vidFilename = getCameraDCIMName('VID', ext);
+
+      const vidItem = {
+        id: Date.now(),
+        filename: vidFilename,
+        timestamp: new Date().toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' }),
+        photoBlob: videoThumbBlob,
+        photoUrl: thumbUrl,
+        videoBlob: videoBlob,
+        videoUrl: videoUrl,
+        videoExt: ext,
+        isLive: true,
+        isVideoOnly: true
+      };
+
+      galleryItems.unshift(vidItem);
+      activeItemIndex = 0;
+      savePhotoToDB(vidItem);
+      updateBottomThumbnailUI();
+
+      // Auto-save video directly to phone gallery on stop (inside user tap!)
+      if (isAutoSaveActive) {
+        triggerDeviceDownload(videoUrl, vidFilename);
+        showSavedBadge('✓ Video Tersimpan ke Galeri HP');
+      } else {
+        showToast('✓ Video tersimpan di galeri aplikasi');
+      }
+    };
+
+    videoMediaRecorder.start(250);
+    isRecordingVideo = true;
+    playVideoBeep(true);
+    shutterBtn.classList.add('recording');
+
+    // Show timer pill
+    videoStartTime = Date.now();
+    videoTimerText.textContent = '00:00';
+    videoTimerPill.style.display = 'inline-flex';
+    if (installBtn) installBtn.style.display = 'none';
+
+    videoTimerInterval = setInterval(() => {
+      const secs = Math.floor((Date.now() - videoStartTime) / 1000);
+      const m = String(Math.floor(secs / 60)).padStart(2, '0');
+      const s = String(secs % 60).padStart(2, '0');
+      videoTimerText.textContent = `${m}:${s}`;
+    }, 500);
+  } else {
+    // Stop video recording
+    isRecordingVideo = false;
+    playVideoBeep(false);
+    shutterBtn.classList.remove('recording');
+    clearInterval(videoTimerInterval);
+    videoTimerPill.style.display = 'none';
+    if (installBtn && !isRunningStandalone()) {
+      installBtn.style.display = 'inline-flex';
+    }
+
+    if (videoMediaRecorder && videoMediaRecorder.state !== 'inactive') {
+      videoMediaRecorder.stop();
+    }
+  }
 }
 
-// ==========================================
-// 4. STORAGE (INDEXEDDB) & AUTO-SAVE GALLERY
-// ==========================================
+// ============================================================================
+// 9. AUTO-SAVE TO DEVICE GALLERY & INDEXEDDB PERSISTENT STORAGE
+// ============================================================================
+function triggerDeviceDownload(blobUrl, filename) {
+  try {
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      if (a.parentNode) document.body.removeChild(a);
+    }, 1000);
+  } catch (err) {
+    console.warn('Download error:', err);
+  }
+}
 
 function initDB() {
   return new Promise((resolve) => {
     if (!window.indexedDB) {
-      console.warn('IndexedDB tidak didukung pada browser ini');
       resolve(null);
       return;
     }
-    const request = indexedDB.open('FotoLiveDB', 1);
-    request.onupgradeneeded = (e) => {
+    const req = indexedDB.open('FotoLiveDB', 2);
+    req.onupgradeneeded = (e) => {
       const database = e.target.result;
       if (!database.objectStoreNames.contains('photos')) {
         database.createObjectStore('photos', { keyPath: 'id' });
       }
     };
-    request.onsuccess = (e) => {
+    req.onsuccess = (e) => {
       db = e.target.result;
       resolve(db);
     };
-    request.onerror = (e) => {
-      console.warn('Gagal membuka IndexedDB:', e);
-      resolve(null);
-    };
+    req.onerror = () => resolve(null);
   });
 }
 
@@ -642,16 +1363,18 @@ function savePhotoToDB(item) {
   if (!db) return;
   try {
     const tx = db.transaction('photos', 'readwrite');
-    const store = tx.objectStore('photos');
-    store.put({
+    tx.objectStore('photos').put({
       id: item.id,
+      filename: item.filename,
       timestamp: item.timestamp,
       photoBlob: item.photoBlob,
       videoBlob: item.videoBlob,
-      isLive: item.isLive
+      videoExt: item.videoExt || 'mp4',
+      isLive: item.isLive,
+      isVideoOnly: !!item.isVideoOnly
     });
   } catch (err) {
-    console.warn('Gagal menyimpan ke IndexedDB:', err);
+    console.warn('IndexedDB save error:', err);
   }
 }
 
@@ -659,37 +1382,35 @@ async function loadPhotosFromDB() {
   if (!db) await initDB();
   if (!db) return;
 
-  try {
-    const tx = db.transaction('photos', 'readonly');
-    const store = tx.objectStore('photos');
-    const request = store.getAll();
-    request.onsuccess = () => {
-      const savedItems = request.result || [];
-      savedItems.sort((a, b) => b.id - a.id); // Foto terbaru di awal
-
-      galleryItems = savedItems.map(s => ({
-        id: s.id,
-        timestamp: s.timestamp,
-        photoBlob: s.photoBlob,
-        photoUrl: URL.createObjectURL(s.photoBlob),
-        videoBlob: s.videoBlob,
-        videoUrl: s.videoBlob ? URL.createObjectURL(s.videoBlob) : null,
-        isLive: s.isLive
-      }));
-
-      if (galleryItems.length > 0) {
-        thumbImg.src = galleryItems[0].photoUrl;
-        thumbImg.style.display = 'block';
-        const thumbIcon = document.getElementById('thumb-icon');
-        if (thumbIcon) thumbIcon.style.display = 'none';
-        thumbCount.textContent = galleryItems.length;
-        thumbCount.style.display = 'block';
-        galleryThumb.style.display = 'flex';
-      }
-    };
-  } catch (err) {
-    console.warn('Gagal memuat galeri dari IndexedDB:', err);
-  }
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('photos', 'readonly');
+      const req = tx.objectStore('photos').getAll();
+      req.onsuccess = () => {
+        const rows = req.result || [];
+        rows.sort((a, b) => b.id - a.id);
+        galleryItems = rows
+          .filter(r => r && r.photoBlob)
+          .map(r => ({
+            id: r.id,
+            filename: r.filename || `IMG_${r.id}.jpg`,
+            timestamp: r.timestamp || '',
+            photoBlob: r.photoBlob,
+            photoUrl: URL.createObjectURL(r.photoBlob),
+            videoBlob: r.videoBlob || null,
+            videoUrl: r.videoBlob ? URL.createObjectURL(r.videoBlob) : null,
+            videoExt: r.videoExt || 'mp4',
+            isLive: !!r.isLive,
+            isVideoOnly: !!r.isVideoOnly
+          }));
+        updateBottomThumbnailUI(false);
+        resolve();
+      };
+      req.onerror = () => resolve();
+    } catch (e) {
+      resolve();
+    }
+  });
 }
 
 function deletePhotoFromDB(id) {
@@ -697,260 +1418,246 @@ function deletePhotoFromDB(id) {
   try {
     const tx = db.transaction('photos', 'readwrite');
     tx.objectStore('photos').delete(id);
-  } catch (err) {
-    console.warn('Gagal menghapus dari IndexedDB:', err);
-  }
+  } catch (e) {}
 }
 
-// Otomatis Simpan ke Penyimpanan/Galeri HP (File .jpg & .webm)
-function autoSaveToDeviceGallery(item) {
-  if (!isAutoSaveActive) return;
-
-  try {
-    // 1. Simpan foto diam JPG (otomatis masuk album Unduhan/Galeri HP)
-    const a = document.createElement('a');
-    a.href = item.photoUrl;
-    a.download = `FotoLive_${item.id}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    // 2. Jika mode Live Photo aktif, simpan juga klip geraknya
-    if (item.isLive && item.videoUrl) {
-      setTimeout(() => {
-        const v = document.createElement('a');
-        v.href = item.videoUrl;
-        v.download = `FotoLive_Motion_${item.id}.webm`;
-        document.body.appendChild(v);
-        v.click();
-        document.body.removeChild(v);
-      }, 350);
+function updateBottomThumbnailUI(animate = true) {
+  if (galleryItems.length > 0) {
+    thumbImg.src = galleryItems[0].photoUrl;
+    thumbImg.style.display = 'block';
+    if (thumbIcon) thumbIcon.style.display = 'none';
+    thumbCount.textContent = galleryItems.length;
+    thumbCount.style.display = 'block';
+    if (animate) {
+      galleryThumb.classList.remove('pop');
+      void galleryThumb.offsetWidth;
+      galleryThumb.classList.add('pop');
     }
-  } catch (err) {
-    console.warn('Gagal auto-save ke perangkat:', err);
-  }
-}
-
-// ==========================================
-// 5. GALLERY & INTERACTIVE VIEWER
-// ==========================================
-
-function saveCaptureToGallery(photoBlob, videoBlob, isLive) {
-  const item = {
-    id: Date.now(),
-    timestamp: new Date().toLocaleTimeString('id-ID'),
-    photoBlob: photoBlob,
-    photoUrl: URL.createObjectURL(photoBlob),
-    videoBlob: videoBlob,
-    videoUrl: videoBlob ? URL.createObjectURL(videoBlob) : null,
-    isLive: isLive
-  };
-
-  galleryItems.unshift(item);
-  activeItemIndex = 0;
-
-  // 1. Simpan permanen ke IndexedDB
-  savePhotoToDB(item);
-
-  // 2. Simpan otomatis ke Galeri HP (Download / DCIM)
-  if (isAutoSaveActive) {
-    autoSaveToDeviceGallery(item);
-  }
-
-  // Update thumbnail in bottom-left
-  thumbImg.src = item.photoUrl;
-  thumbImg.style.display = 'block';
-  const thumbIcon = document.getElementById('thumb-icon');
-  if (thumbIcon) thumbIcon.style.display = 'none';
-  thumbCount.textContent = galleryItems.length;
-  thumbCount.style.display = 'block';
-  galleryThumb.style.display = 'flex';
-
-  if (isAutoSaveActive) {
-    showToast(isLive ? 'Foto-Live otomatis tersimpan ke Galeri HP! ◎' : 'Foto otomatis tersimpan ke Galeri HP! 📸', 2200);
   } else {
-    showToast(isLive ? 'Foto-Live tersimpan di galeri ◎' : 'Foto tersimpan di galeri 📸', 1800);
+    thumbImg.src = '';
+    thumbImg.style.display = 'none';
+    if (thumbIcon) thumbIcon.style.display = 'flex';
+    thumbCount.style.display = 'none';
   }
 }
 
+// ============================================================================
+// 10. IN-APP CAMERA ROLL & INTERACTIVE LIVE PHOTO PLAYER
+// ============================================================================
 galleryThumb.addEventListener('click', () => {
+  triggerHaptic(15);
   if (galleryItems.length === 0) {
-    showToast('Belum ada foto yang diambil');
+    showToast('Belum ada foto — ketuk tombol rana untuk memotret!');
     return;
   }
   openModalViewer(0);
 });
 
-function updateModalNavUI() {
-  if (modalPhotoCounter) {
-    modalPhotoCounter.textContent = `${activeItemIndex + 1} / ${galleryItems.length}`;
-  }
-  if (modalPrevBtn) {
-    modalPrevBtn.classList.toggle('disabled', activeItemIndex >= galleryItems.length - 1);
-  }
-  if (modalNextBtn) {
-    modalNextBtn.classList.toggle('disabled', activeItemIndex <= 0);
-  }
-}
-
-if (modalPrevBtn) {
-  modalPrevBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (activeItemIndex < galleryItems.length - 1) {
-      openModalViewer(activeItemIndex + 1);
-    }
-  });
-}
-
-if (modalNextBtn) {
-  modalNextBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (activeItemIndex > 0) {
-      openModalViewer(activeItemIndex - 1);
-    }
+function renderFilmstrip() {
+  if (!modalFilmstrip) return;
+  modalFilmstrip.innerHTML = '';
+  galleryItems.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = `filmstrip-item ${idx === activeItemIndex ? 'active' : ''}`;
+    const img = document.createElement('img');
+    img.src = item.photoUrl;
+    img.alt = 'Thumb';
+    div.appendChild(img);
+    div.addEventListener('click', () => openModalViewer(idx));
+    modalFilmstrip.appendChild(div);
   });
 }
 
 function openModalViewer(index) {
-  activeItemIndex = index;
+  activeItemIndex = Math.max(0, Math.min(galleryItems.length - 1, index));
   const item = galleryItems[activeItemIndex];
   if (!item) return;
 
+  stopMotionPlayback();
+
   modalStillImg.src = item.photoUrl;
   modalStillImg.style.display = 'block';
+  modalPhotoCounter.textContent = `${activeItemIndex + 1} / ${galleryItems.length}`;
+  if (modalTimestamp) modalTimestamp.textContent = item.timestamp || 'Tersimpan';
 
-  if (item.isLive && item.videoUrl) {
+  if (item.isVideoOnly && item.videoUrl) {
+    // Full Video item: play automatically with controls
+    modalStillImg.style.display = 'none';
+    modalMotionVideo.src = item.videoUrl;
+    modalMotionVideo.style.display = 'block';
+    modalMotionVideo.controls = true;
+    modalMotionVideo.muted = false;
+    modalLiveBadge.style.display = 'inline-flex';
+    modalBadgeText.textContent = 'VIDEO';
+    holdHint.style.display = 'none';
+    if (playLiveBtn) playLiveBtn.style.display = 'none';
+    downloadVideoBtn.style.display = 'inline-flex';
+    modalMotionVideo.play().catch(() => {});
+  } else if (item.isLive && item.videoUrl) {
     modalMotionVideo.src = item.videoUrl;
     modalMotionVideo.style.display = 'none';
+    modalMotionVideo.controls = false;
     modalLiveBadge.style.display = 'inline-flex';
+    modalBadgeText.textContent = 'LIVE';
     holdHint.style.display = 'flex';
+    if (playLiveBtn) playLiveBtn.style.display = 'inline-flex';
     downloadVideoBtn.style.display = 'inline-flex';
   } else {
     modalMotionVideo.src = '';
     modalMotionVideo.style.display = 'none';
     modalLiveBadge.style.display = 'none';
     holdHint.style.display = 'none';
+    if (playLiveBtn) playLiveBtn.style.display = 'none';
     downloadVideoBtn.style.display = 'none';
   }
 
-  updateModalNavUI();
+  modalPrevBtn.classList.toggle('disabled', activeItemIndex >= galleryItems.length - 1);
+  modalNextBtn.classList.toggle('disabled', activeItemIndex <= 0);
 
-  // Setup download links
+  renderFilmstrip();
+
   downloadPhotoBtn.onclick = () => {
-    const a = document.createElement('a');
-    a.href = item.photoUrl;
-    a.download = `FotoLive_Photo_${item.id}.jpg`;
-    a.click();
-    showToast('Foto JPG diunduh');
+    triggerHaptic(15);
+    triggerDeviceDownload(item.photoUrl, item.filename || getCameraDCIMName('IMG', 'jpg'));
+    showToast('💾 Foto JPG disimpan ke Galeri HP');
   };
 
   downloadVideoBtn.onclick = () => {
     if (!item.videoUrl) return;
-    const a = document.createElement('a');
-    a.href = item.videoUrl;
-    a.download = `FotoLive_Motion_${item.id}.webm`;
-    a.click();
-    showToast('Klip video gerak diunduh');
+    triggerHaptic(15);
+    const vName = getCameraDCIMName(item.isVideoOnly ? 'VID' : 'LIVE', item.videoExt || 'mp4');
+    triggerDeviceDownload(item.videoUrl, vName);
+    showToast('🎬 Video disimpan ke Galeri HP');
   };
 
   modal.classList.add('active');
 }
 
+if (modalPrevBtn) {
+  modalPrevBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activeItemIndex < galleryItems.length - 1) openModalViewer(activeItemIndex + 1);
+  });
+}
+
+if (modalNextBtn) {
+  modalNextBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (activeItemIndex > 0) openModalViewer(activeItemIndex - 1);
+  });
+}
+
 closeModalBtn.addEventListener('click', () => {
+  stopMotionPlayback();
   modal.classList.remove('active');
-  modalMotionVideo.pause();
 });
 
-// Delete active capture
 deleteBtn.addEventListener('click', () => {
-  if (confirm('Hapus foto ini dari galeri?')) {
-    const deletedItem = galleryItems[activeItemIndex];
-    if (deletedItem) {
-      deletePhotoFromDB(deletedItem.id);
-    }
+  const item = galleryItems[activeItemIndex];
+  if (!item) return;
+  triggerHaptic(20);
+  deletePhotoFromDB(item.id);
+  galleryItems.splice(activeItemIndex, 1);
 
-    galleryItems.splice(activeItemIndex, 1);
-    if (galleryItems.length > 0) {
-      const nextIndex = Math.min(activeItemIndex, galleryItems.length - 1);
-      thumbCount.textContent = galleryItems.length;
-      thumbImg.src = galleryItems[0].photoUrl;
-      openModalViewer(nextIndex);
-    } else {
-      modal.classList.remove('active');
-      thumbImg.src = '';
-      thumbImg.style.display = 'none';
-      const thumbIcon = document.getElementById('thumb-icon');
-      if (thumbIcon) thumbIcon.style.display = 'block';
-      thumbCount.style.display = 'none';
-      thumbCount.textContent = '0';
-    }
-    showToast('Foto dihapus dari galeri');
+  if (galleryItems.length > 0) {
+    const nextIdx = Math.min(activeItemIndex, galleryItems.length - 1);
+    updateBottomThumbnailUI(false);
+    openModalViewer(nextIdx);
+  } else {
+    modal.classList.remove('active');
+    updateBottomThumbnailUI(false);
   }
+  showToast('🗑️ Dihapus dari galeri');
 });
 
-// Share API
 shareBtn.addEventListener('click', async () => {
   const item = galleryItems[activeItemIndex];
   if (!item) return;
+  triggerHaptic(15);
 
   try {
-    if (navigator.share && item.photoBlob) {
-      const file = new File([item.photoBlob], `FotoLive_${item.id}.jpg`, { type: 'image/jpeg' });
+    const shareBlob = item.isVideoOnly && item.videoBlob ? item.videoBlob : item.photoBlob;
+    const shareName = item.filename || `IMG_${item.id}.jpg`;
+    const shareType = item.isVideoOnly ? (item.videoBlob.type || 'video/mp4') : 'image/jpeg';
+
+    if (navigator.share && shareBlob) {
+      const file = new File([shareBlob], shareName, { type: shareType });
       await navigator.share({
-        title: 'Foto-Live',
-        text: 'Lihat foto gerak yang saya ambil dengan aplikasi Foto-Live!',
+        title: 'Foto-Live Camera',
         files: [file]
       });
-      showToast('Berhasil dibagikan');
     } else {
-      showToast('Gunakan tombol Unduh untuk menyimpan');
+      triggerDeviceDownload(item.photoUrl, shareName);
+      showToast('💾 File diunduh ke Galeri HP');
     }
   } catch (err) {
-    console.warn('Share error:', err);
+    console.warn('Share cancelled or failed:', err);
   }
 });
 
-// --- Touch & Hold to Play Motion (Apple / Android Live Photo Gesture) ---
+// Touch & Hold or Click "Putar Live" to Play Live Photo Motion
 let isHoldingMotion = false;
 
-function startMotionPlayback(e) {
+function startMotionPlayback() {
   const item = galleryItems[activeItemIndex];
-  if (!item || !item.isLive || !item.videoUrl) return;
+  if (!item || !item.isLive || !item.videoUrl || item.isVideoOnly) return;
 
   isHoldingMotion = true;
+  triggerHaptic(15);
   modalStillImg.style.display = 'none';
   modalMotionVideo.style.display = 'block';
   modalMotionVideo.currentTime = 0;
-  modalMotionVideo.play().catch(e => console.warn('Video play error:', e));
-
+  modalMotionVideo.play().catch(() => {});
   holdHint.classList.add('playing');
-  modalLiveBadge.classList.add('active');
-  playLiveChime();
 }
 
-function stopMotionPlayback(e) {
-  if (!isHoldingMotion) return;
+function stopMotionPlayback() {
+  if (!isHoldingMotion) {
+    if (modalMotionVideo) modalMotionVideo.pause();
+    return;
+  }
   isHoldingMotion = false;
-
   modalMotionVideo.pause();
   modalMotionVideo.style.display = 'none';
   modalStillImg.style.display = 'block';
-
   holdHint.classList.remove('playing');
-  modalLiveBadge.classList.remove('active');
 }
 
-interactiveArea.addEventListener('pointerdown', startMotionPlayback);
+if (playLiveBtn) {
+  playLiveBtn.addEventListener('click', () => {
+    if (isHoldingMotion) {
+      stopMotionPlayback();
+    } else {
+      startMotionPlayback();
+    }
+  });
+}
+
+interactiveArea.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.modal-nav-btn')) return;
+  startMotionPlayback();
+});
 interactiveArea.addEventListener('pointerup', stopMotionPlayback);
 interactiveArea.addEventListener('pointerleave', stopMotionPlayback);
 interactiveArea.addEventListener('pointercancel', stopMotionPlayback);
 
-// ==========================================
-// 6. INITIALIZATION
-// ==========================================
+// ============================================================================
+// 11. INITIALIZATION & SHORTCUT URL PARAMS
+// ============================================================================
 window.addEventListener('DOMContentLoaded', async () => {
-  updateAutoSaveUI();
+  syncSettingsTrayUI();
+  updateInstallUI();
   await loadPhotosFromDB();
-  checkStandaloneMode();
-  startCamera();
+
+  // Check URL parameters for PWA Shortcuts (?mode=video, ?mode=live, ?action=gallery)
+  const params = new URLSearchParams(window.location.search);
+  const modeParam = params.get('mode');
+  if (modeParam === 'video') setCameraMode('video');
+  else if (modeParam === 'live') setCameraMode('live');
+
+  await startCamera();
+
+  if (params.get('action') === 'gallery' && galleryItems.length > 0) {
+    openModalViewer(0);
+  }
 });
