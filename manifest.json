@@ -1,6 +1,6 @@
 {
-  "id": "/index.html",
-  "name": "Foto-Live Camera",
+  "id": "foto-live-pwa",
+  "name": "Foto-Live",
   "short_name": "Foto-Live",
   "description": "Kamera Foto-Live & Video HD dengan penyimpanan otomatis ke Galeri HP, fokus sentuh, zoom 0.5x/1x/2x, dan pratinjau Live Photo interaktif.",
   "start_url": "./index.html",

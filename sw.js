@@ -1,4 +1,4 @@
-const CACHE_NAME = 'foto-live-v5.2';
+const CACHE_NAME = 'foto-live-v5.3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -17,27 +17,39 @@ const ASSETS_TO_CACHE = [
 
 // Install: pre-cache all core static assets & skipWaiting immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
         console.warn('Some optional assets could not be cached immediately:', err);
       });
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
-// Activate: clean up all old caches and claim clients immediately
+// Activate: delete all old caches, claim clients, and force-navigate open windows if upgrading from an old cache!
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
+      const oldKeys = keys.filter((key) => key !== CACHE_NAME);
+      const hadOldCache = oldKeys.length > 0;
+
+      return Promise.all(oldKeys.map((key) => caches.delete(key)))
+        .then(() => self.clients.claim())
+        .then(() => {
+          if (hadOldCache) {
+            return self.clients.matchAll({ type: 'window' }).then((windowClients) => {
+              return Promise.all(
+                windowClients.map((client) => {
+                  if ('navigate' in client) {
+                    return client.navigate(client.url).catch(() => {});
+                  }
+                })
+              );
+            });
           }
-        })
-      );
-    }).then(() => self.clients.claim())
+        });
+    })
   );
 });
 
@@ -48,7 +60,7 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Fetch: Network-first with offline cache fallback so updates always appear immediately
+// Fetch: Network-first with cache-busting bypass so updates always appear immediately
 self.addEventListener('fetch', (event) => {
   const req = event.request;
 
@@ -61,7 +73,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-store' })
       .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();
@@ -72,7 +84,7 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       })
       .catch(() => {
-        return caches.match(req).then((cachedResponse) => {
+        return caches.match(req, { ignoreSearch: true }).then((cachedResponse) => {
           if (cachedResponse) {
             return cachedResponse;
           }
