@@ -219,12 +219,11 @@
         <button class="filter-chip" data-filter="mono">Hitam Putih</button>
       </div>
 
-      <!-- Optical / Digital Zoom Selector Pills -->
-      <div class="zoom-controls">
+      <!-- Optical / Digital Zoom Selector Pills (0.5x, 1x, 2x) -->
+      <div class="zoom-controls" id="zoom-controls">
         <button class="zoom-btn" data-zoom="0.5">0.5</button>
         <button class="zoom-btn active" data-zoom="1">1<span>x</span></button>
         <button class="zoom-btn" data-zoom="2">2</button>
-        <button class="zoom-btn" data-zoom="3">3</button>
       </div>
 
       <!-- Offscreen Canvas for High-Res Photo Capture -->
@@ -295,10 +294,18 @@
         </div>
       </div>
 
-      <button id="play-live-btn" class="btn-play-live" title="Putar Gerak Live Photo">
-        ▶ Putar Live
-      </button>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button id="play-live-btn" class="btn-play-live" title="Putar Gerak Live Photo">
+          ▶ Putar Live
+        </button>
+        <button id="grid-gallery-btn" class="cam-icon-btn text-pill-btn" title="Lihat Semua Foto (Grid Galeri)">
+          ☷ Semua
+        </button>
+      </div>
     </div>
+
+    <!-- All Photos 3-Column Grid View -->
+    <div id="gallery-grid-view" class="gallery-grid-view" style="display: none;"></div>
 
     <div id="interactive-area" class="modal-content-area" title="Tahan layar untuk memutar gerak Live Photo">
       <button id="modal-prev-btn" class="modal-nav-btn prev" title="Foto Sebelumnya">‹</button>
